@@ -138,11 +138,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error('Telegram auth failed:', err);
         setError(err instanceof Error ? err.message : 'Authentication failed');
-        // Clear stale credentials
-        localStorage.removeItem('oxycode_token');
-        localStorage.removeItem('oxycode_user');
-        setToken(null);
-        setUser(null);
+        // Only clear if no stored credentials exist (first-time failure)
+        if (!localStorage.getItem('oxycode_token')) {
+          setToken(null);
+          setUser(null);
+        }
       } finally {
         setIsLoading(false);
       }

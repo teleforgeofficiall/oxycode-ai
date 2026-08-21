@@ -20,12 +20,5 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!isAuthenticated) {
-    const isTelegram = !!window.Telegram?.WebApp;
-    if (isTelegram) {
-      return <Navigate to="/" replace />;
-    }
-  }
-
   return <>{children}</>;
 }
