@@ -172,11 +172,11 @@ async def check_joined_callback(update, context):
 
 async def apply_referral(uid, context):
     """Apply pending referral if user just joined channels."""
-    u = db.get_user(uid)
-    if not u:
+    user_state = db.get_user_state(uid)
+    if not user_state:
         return
-    pending = u.get("user_state", "")
-    data = u.get("state_data", "")
+    pending = user_state.get("state", "")
+    data = user_state.get("data", "")
     if pending == "pending_ref" and data:
         referrer_id = db.resolve_referral_code(data)
         if referrer_id and referrer_id != uid:
@@ -428,8 +428,8 @@ async def handle_admin_rate_limit_input(update: Update, context):
         return False  # not handled
 
     # Check if admin is waiting for rate limit input
-    user = db.get_user(uid)
-    if not user or user.get("user_state") != "waiting_for_rate_limit":
+    user_state = db.get_user_state(uid)
+    if not user_state or user_state.get("state") != "waiting_for_rate_limit":
         return False  # not in rate limit flow
 
     text = update.message.text.strip()
@@ -490,8 +490,8 @@ async def handle_text(update: Update, context):
     uid = update.effective_user.id
 
     # Check if admin is in rate limit flow (handled by dedicated handler)
-    user = db.get_user(uid)
-    if user and user.get("user_state") == "waiting_for_rate_limit":
+    user_state = db.get_user_state(uid)
+    if user_state and user_state.get("state") == "waiting_for_rate_limit":
         return  # already handled by handle_admin_rate_limit_input
 
     # Non-admin blocked

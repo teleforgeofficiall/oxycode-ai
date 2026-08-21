@@ -107,23 +107,27 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
 
   // Fetch Cloudflare status
-  const { data: cfStatus, isLoading: cfLoading } = useQuery({
+  const { data: cfStatus, isLoading: cfLoading, error: cfError } = useQuery({
     queryKey: ['cloudflare-status'],
     queryFn: async () => {
       const res = await apiClient.get('/api/cloudflare/status');
       return res.data;
     },
     enabled: !!token,
+    throwOnError: false,
+    retry: false,
   });
 
   // Fetch user limits
-  const { data: limitsData, isLoading: limitsLoading } = useQuery({
+  const { data: limitsData, isLoading: limitsLoading, error: limitsError } = useQuery({
     queryKey: ['limits'],
     queryFn: async () => {
       const res = await apiClient.get('/api/limits');
       return res.data;
     },
     enabled: !!token,
+    throwOnError: false,
+    retry: false,
   });
 
   // Connect Cloudflare mutation
@@ -196,7 +200,11 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {cfLoading ? (
+          {cfError ? (
+            <p className="text-sm text-kumo-subtle">
+              Unable to load Cloudflare status. Please try again later.
+            </p>
+          ) : cfLoading ? (
             <Skeleton className="h-10 w-full" />
           ) : cf?.connected ? (
             <div className="space-y-3">
@@ -270,7 +278,15 @@ export default function SettingsPage() {
         </section>
 
         {/* Daily Usage Section */}
-        <DailyUsageSection limitsData={limitsData} limitsLoading={limitsLoading} />
+        {limitsError ? (
+          <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
+            <p className="text-sm text-kumo-subtle">
+              Unable to load usage data. Please try again later.
+            </p>
+          </section>
+        ) : (
+          <DailyUsageSection limitsData={limitsData} limitsLoading={limitsLoading} />
+        )}
 
         {/* Telegram Account Section */}
         <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">

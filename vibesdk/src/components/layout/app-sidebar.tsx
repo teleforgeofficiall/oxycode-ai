@@ -147,6 +147,38 @@ export function AppSidebar() {
 			</Sidebar.Content>
 
 			<Sidebar.Footer className="h-auto p-3">
+				{/* User Profile Card */}
+				{!isCollapsed && user && (
+					<button
+						onClick={() => navigate('/profile')}
+						className="w-full flex items-center gap-3 rounded-lg px-3 py-2.5 mb-1.5 text-left hover:bg-bg-4/50 transition-colors"
+					>
+						<div className="size-9 rounded-full bg-brand-emphasis/20 flex items-center justify-center text-sm font-bold text-brand-emphasis shrink-0">
+							{user.firstName?.charAt(0) || '👤'}
+						</div>
+						<div className="min-w-0 flex-1">
+							<p className="text-sm font-medium text-kumo-default truncate">
+								{user.firstName || 'User'}
+							</p>
+							<p className="text-xs text-kumo-subtle truncate">
+								@{user.username || 'username'}
+							</p>
+						</div>
+					</button>
+				)}
+
+				{/* Collapsed profile avatar */}
+				{isCollapsed && user && (
+					<button
+						onClick={() => navigate('/profile')}
+						className="flex items-center justify-center mb-1.5"
+					>
+						<div className="size-8 rounded-full bg-brand-emphasis/20 flex items-center justify-center text-sm font-bold text-brand-emphasis">
+							{user.firstName?.charAt(0) || '👤'}
+						</div>
+					</button>
+				)}
+
 				<div className="flex w-full min-w-0 items-center gap-2">
 					<div className="min-w-0 flex-1">
 						<button
