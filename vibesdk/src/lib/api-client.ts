@@ -14,8 +14,29 @@ interface ApiResponse<T = any> {
 class ApiClient {
   private token: string | null = null;
 
+  constructor() {
+    try {
+      this.token = localStorage.getItem('oxycode_token');
+    } catch {
+      this.token = null;
+    }
+  }
+
   setToken(token: string | null) {
     this.token = token;
+    try {
+      if (token) localStorage.setItem('oxycode_token', token);
+      else localStorage.removeItem('oxycode_token');
+    } catch {}
+  }
+
+  // Convenience methods for GET/DELETE
+  async get<T = any>(path: string): Promise<T> {
+    return this.request<T>('GET', path);
+  }
+
+  async delete<T = any>(path: string): Promise<T> {
+    return this.request<T>('DELETE', path);
   }
 
   private async request<T = any>(

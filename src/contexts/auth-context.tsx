@@ -27,6 +27,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isMaintenance: boolean;
+  isAdmin: boolean;
   login: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
@@ -50,7 +52,7 @@ function getTelegramUser(): TelegramUser | null {
 
 async function authenticateWithBackend(
   initData: string,
-): Promise<{ token: string; user: TelegramUser }> {
+): Promise<{ token: string; user: TelegramUser; maintenance: boolean; isAdmin: boolean }> {
   const response = await fetch(`${API_BASE}/api/auth/telegram`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,6 +85,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [isMaintenance, setIsMaintenance] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -106,10 +110,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const result = await authenticateWithBackend(initData);
         setToken(result.token);
         setUser(result.user);
+        setIsMaintenance(result.maintenance);
+        setIsAdmin(result.isAdmin);
         localStorage.setItem('oxycode_token', result.token);
         localStorage.setItem('oxycode_user', JSON.stringify(result.user));
       } catch (err) {
         console.error('Telegram auth failed:', err);
+        // Handle maintenance 503 responses
+        if (err instanceof Error && err.message.includes('maintenance')) {
+          setIsMaintenance(true);
+          setIsLoading(false);
+          return;
+        }
         setError(err instanceof Error ? err.message : 'Authentication failed');
         // Clear stale credentials
         localStorage.removeItem('oxycode_token');
@@ -149,11 +161,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!token && !!user,
       isLoading,
       error,
+      isMaintenance,
+      isAdmin,
       login,
       logout,
       clearError,
     }),
-    [user, token, isLoading, error, login, logout, clearError],
+    [user, token, isLoading, error, isMaintenance, isAdmin, login, logout, clearError],
   );
 
   return (

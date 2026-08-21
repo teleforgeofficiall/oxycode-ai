@@ -16,9 +16,9 @@
                                                |
                                           database.py
 
-  MAIN BOT only:                    CLONE BOT only:
-  - api_server.py                   - tools.py
-  - cloudflare_deploy.py            (context_engine in MAIN BOT)
+  MAIN BOT only:
+  - api_server.py
+  - cloudflare_deploy.py
   - cloudflare_oauth.py
   - error_fix.py
   - project_analyzer.py
@@ -31,7 +31,7 @@
 
 **Purpose:** Central configuration hub. Loads all environment variables, defines AI model endpoints, bot messages, and system limits.
 
-**Location:** `MAIN BOT/config.py`, `CLONE BOT/config.py`
+**Location:** `MAIN BOT/config.py`
 
 **Key Exports:**
 | Export | Type | Description |
@@ -63,7 +63,7 @@
 
 **Purpose:** PostgreSQL database layer using psycopg2 with connection pooling. Handles all persistent storage for users, sessions, payments, channels, deployments, and Cloudflare tokens.
 
-**Location:** `MAIN BOT/database.py`, `CLONE BOT/database.py`
+**Location:** `MAIN BOT/database.py`
 
 **Key Exports:**
 | Export | Type | Description |
@@ -117,7 +117,7 @@
 
 **Purpose:** Hermes-style autonomous coding agent. Implements the THINK→ACT→OBSERVE loop with tool calling, model rotation, and sandboxed execution.
 
-**Location:** `MAIN BOT/agent_engine.py`, `CLONE BOT/agent_engine.py`
+**Location:** `MAIN BOT/agent_engine.py`
 
 **Key Exports:**
 | Export | Type | Description |
@@ -164,7 +164,7 @@ Primary (mimo-v2.5-free)
 
 **Purpose:** 7-tool sandbox for code execution, file operations, and web search. All operations are isolated to the sandbox directory.
 
-**Location:** `MAIN BOT/coding_tools.py`, `CLONE BOT/coding_tools.py`
+**Location:** `MAIN BOT/coding_tools.py`
 
 **Key Exports:**
 | Export | Type | Description |
@@ -192,7 +192,7 @@ Primary (mimo-v2.5-free)
 
 **Purpose:** Telegram Stars payment integration. Handles credit packages, invoice generation, and payment confirmation with idempotency.
 
-**Location:** `MAIN BOT/payments.py`, `CLONE BOT/payments.py`
+**Location:** `MAIN BOT/payments.py`
 
 **Key Exports:**
 | Export | Type | Description |
@@ -220,7 +220,7 @@ Primary (mimo-v2.5-free)
 
 **Purpose:** Triple-layer memory system combining file-based storage (HermesMemory), PostgreSQL (MemoryDatabase), and unified interface (OxygentMemory).
 
-**Location:** `MAIN BOT/memory_system.py`, `CLONE BOT/memory_system.py`
+**Location:** `MAIN BOT/memory_system.py`
 
 **Key Exports:**
 | Export | Type | Description |
@@ -276,32 +276,7 @@ Primary (mimo-v2.5-free)
 
 ---
 
-## 8. tools.py
-
-**Purpose:** Alternate SQLite-only memory system used in CLONE BOT. Simpler than memory_system.py — no file-based layer.
-
-**Location:** `CLONE BOT/tools.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `MemorySystem` | `class` | SQLite-only memory store |
-
-**MemorySystem Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `save(user_id, key, value)` | `None` | Store key-value pair |
-| `get(user_id, key)` | `str or None` | Retrieve by key |
-| `search(user_id, query)` | `list[dict]` | Search stored memory |
-| `delete(user_id, key)` | `None` | Remove entry |
-
-**Storage:** SQLite database (`./data/tools.db`)
-
-**Dependencies:** None (uses sqlite3 directly)
-
----
-
-## 9. api_server.py (MAIN BOT only)
+## 8. api_server.py (MAIN BOT only)
 
 **Purpose:** FastAPI backend for the Telegram Mini App web dashboard. Handles JWT authentication, project management, AI chat proxy, Cloudflare deployment, and error fixing.
 
@@ -504,16 +479,6 @@ MAIN BOT:
     ├── error_fix.py ──────────────── depends on: config
     ├── project_analyzer.py ───────── (no deps)
     └── deploy_vps.py ─────────────── (no deps)
-
-CLONE BOT:
-  main.py
-    ├── config.py ─────────────────── (no deps, shares MAIN config)
-    ├── database.py ───────────────── depends on: config
-    ├── agent_engine.py ───────────── depends on: config, coding_tools
-    ├── coding_tools.py ───────────── (no deps)
-    ├── payments.py ───────────────── depends on: database
-    ├── memory_system.py ──────────── (no deps)
-    └── tools.py ──────────────────── (no deps, SQLite-only memory)
 ```
 
 ## Related Codemaps

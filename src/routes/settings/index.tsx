@@ -1,7 +1,7 @@
 import { useAuth } from '@/contexts/auth-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { ArrowLeft, User, CreditCard, Bot, Cloud, Unplug, ExternalLink, Loader2, CheckCircle2 } from '@phosphor-icons/react';
+import { ArrowLeft, User, CreditCard, Bot, Cloud, Plug, ArrowSquareOut, Spinner, CheckCircle } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -106,7 +106,7 @@ export default function SettingsPage() {
           ) : cf?.connected ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-kumo-subtle">
-                <CheckCircle2 className="size-4 text-green-500" />
+                <CheckCircle className="size-4 text-green-500" />
                 <span>Connected</span>
               </div>
               <div className="rounded-lg bg-bg-3 dark:bg-kumo-elevated p-3 space-y-1">
@@ -125,9 +125,9 @@ export default function SettingsPage() {
                 disabled={disconnectMutation.isPending}
               >
                 {disconnectMutation.isPending ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  <Spinner className="size-4 mr-2 animate-spin" />
                 ) : (
-                  <Unplug className="size-4 mr-2" />
+                  <Plug className="size-4 mr-2" />
                 )}
                 Disconnect
               </Button>
@@ -143,9 +143,9 @@ export default function SettingsPage() {
                 disabled={connectMutation.isPending}
               >
                 {connectMutation.isPending ? (
-                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  <Spinner className="size-4 mr-2 animate-spin" />
                 ) : (
-                  <ExternalLink className="size-4 mr-2" />
+                  <ArrowSquareOut className="size-4 mr-2" />
                 )}
                 Connect Cloudflare
               </Button>
@@ -219,7 +219,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="font-semibold text-kumo-default">
-                {user?.firstName || 'User'}
+                {user?.first_name || 'User'}
               </h2>
               <p className="text-xs text-kumo-subtle">
                 @{user?.username || 'unknown'} • ID: {user?.id}

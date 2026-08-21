@@ -111,8 +111,7 @@ export default function SettingsPage() {
   const { data: cfStatus, isLoading: cfLoading, error: cfError } = useQuery({
     queryKey: ['cloudflare-status'],
     queryFn: async () => {
-      const res = await apiClient.get('/api/cloudflare/status');
-      return res.data;
+      return await apiClient.get('/api/cloudflare/status');
     },
     enabled: !!token,
     throwOnError: false,
@@ -123,8 +122,7 @@ export default function SettingsPage() {
   const { data: limitsData, isLoading: limitsLoading, error: limitsError } = useQuery({
     queryKey: ['limits'],
     queryFn: async () => {
-      const res = await apiClient.get('/api/limits');
-      return res.data;
+      return await apiClient.get('/api/limits');
     },
     enabled: !!token,
     throwOnError: false,
@@ -134,10 +132,10 @@ export default function SettingsPage() {
   // Connect Cloudflare mutation
   const connectMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.get('/api/cloudflare/auth-url');
-      return res.data;
+      return await apiClient.get('/api/cloudflare/auth-url');
     },
     onSuccess: (data) => {
+      if (!data?.url) return;
       // Open OAuth popup
       const width = 600;
       const height = 700;
@@ -162,14 +160,14 @@ export default function SettingsPage() {
   // Disconnect Cloudflare mutation
   const disconnectMutation = useMutation({
     mutationFn: async () => {
-      await apiClient.delete('/api/cloudflare/disconnect');
+      return await apiClient.delete('/api/cloudflare/disconnect');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cloudflare-status'] });
     },
   });
 
-  const cf = cfStatus?.account;
+  const cf = cfStatus;
 
   return (
     <div className="min-h-screen bg-bg-1 dark:bg-kumo-base">
@@ -234,10 +232,10 @@ export default function SettingsPage() {
               </div>
               <div className="rounded-lg bg-bg-3 dark:bg-kumo-elevated p-3 space-y-1">
                 <p className="text-sm font-medium text-kumo-default">
-                  {cf.account?.accountName || 'Cloudflare Account'}
+                  {cf?.account?.accountName || 'Cloudflare Account'}
                 </p>
                 <p className="text-xs text-kumo-subtle">
-                  {cf.account?.email}
+                  {cf?.account?.email}
                 </p>
               </div>
               <Button

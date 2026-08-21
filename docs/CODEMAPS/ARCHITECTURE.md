@@ -1,7 +1,7 @@
 # System Architecture Codemap
 
 **Last Updated:** 2026-08-21
-**Entry Points:** `MAIN BOT/main.py`, `MAIN BOT/api_server.py`, `CLONE BOT/main.py`
+**Entry Points:** `MAIN BOT/main.py`, `MAIN BOT/api_server.py`
 
 ## Overview
 
@@ -154,7 +154,7 @@ User clicks "Fix" in Mini App
 | `payments.py` | `database.py` | Telegram Stars payments, credit management |
 | `memory_system.py` | (none) | Triple-layer memory (file + SQLite + unified) |
 | `context_engine.py` | (none) | Token tracking, auto-compaction (MAIN BOT) |
-| `tools.py` | (none) | Alternate SQLite memory system (CLONE BOT) |
+
 | `cloudflare_oauth.py` | `database.py` | Per-user Cloudflare OAuth token management |
 | `cloudflare_deploy.py` | `cloudflare_oauth.py` | Deploy to CF Pages/Workers using user tokens |
 | `error_fix.py` | `config.py` | AI-powered error detection and auto-repair |
@@ -170,12 +170,6 @@ User clicks "Fix" in Mini App
 - Mini App backend (FastAPI) for web dashboard
 - Cloudflare deployment with per-user OAuth
 - systemd services for bot and API server
-
-### CLONE BOT
-- Clone/staging variant with core modules
-- 11 Python files (no API server, no Cloudflare, no error fix)
-- Same PostgreSQL backend with isolated schema (`OXYGENT_SCHEMA=clone`)
-- Uses shared config from MAIN BOT
 
 ## External API Endpoints
 
@@ -195,8 +189,7 @@ User clicks "Fix" in Mini App
 4. **Dual Memory** — File-based (HermesMemory) + PostgreSQL (users table)
 5. **Credit System** — Telegram Stars for paid usage, daily limits for free tier
 6. **Per-User OAuth** — Each user connects their own Cloudflare account
-7. **Schema Isolation** — Clone bot uses separate schema in same database
-8. **Approval System** — Dangerous tools require user confirmation
+7. **Approval System** — Dangerous tools require user confirmation
 9. **Connection Pooling** — 5-50 connections with automatic validation and recycling
 
 ## Related Codemaps

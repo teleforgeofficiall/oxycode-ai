@@ -10,7 +10,6 @@ C:\Users\Teleforge\Desktop\OXYCODE AI BOT\
 ├── .gitignore                   # Git ignore rules
 │
 ├── MAIN BOT/                    # Production bot deployment (18 files)
-├── CLONE BOT/                   # Clone/staging variant (11 files)
 ├── vibesdk/                     # Cloudflare Workers SDK (active)
 ├── vibesdk-read/                # Cloudflare Workers SDK (read-only reference)
 └── docs/                        # Documentation (codemaps)
@@ -104,55 +103,6 @@ api_server.py (833 lines)
 └── Main
     └── uvicorn.run()
 ```
-
----
-
-## CLONE BOT/
-
-Clone/staging variant with core modules. Uses shared PostgreSQL schema.
-
-| File | Lines | Purpose | Differences from MAIN |
-|------|-------|---------|----------------------|
-| `main.py` | 3200 | Full bot with all handlers | Expanded handlers, no API server |
-| `config.py` | 146 | Configuration | Shares MAIN BOT config values |
-| `database.py` | 1186 | Same PostgreSQL operations | Uses `OXYGENT_SCHEMA=clone` |
-| `agent_engine.py` | 875 | Same agent loop | Extended version |
-| `coding_tools.py` | 881 | Same 7 tools | Extended version |
-| `payments.py` | 84 | Same payment system | Identical to MAIN |
-| `memory_system.py` | 485 | Same triple memory | Identical to MAIN |
-| `tools.py` | 770 | **Extended memory + tools** | **CLONE BOT only** |
-| `requirements.txt` | ~12 | Same dependencies | Identical to MAIN |
-| `README.md` | ~50 | Clone-specific docs | - |
-| `.env` | - | Environment variables | Uses `OXYGENT_SCHEMA=clone` |
-
-### CLONE BOT Unique Files
-
-#### tools.py
-```
-Purpose: Extended memory system with SQLite + file operations
-Classes:
-  - MemorySystem: SQLite-based key-value store
-  - Extended file tools (read, write, search, patch, terminal)
-  - Web search integration
-Storage: SQLite database (./data/tools.db)
-```
-
----
-
-## archive/
-
-VPS deployment and management scripts (not actively used).
-
-| File | Purpose |
-|------|---------|
-| `check_vps.py` | Check VPS connection status |
-| `deploy_clone_vps.py` | Deploy clone bot to VPS |
-| `deploy_vps.py` | Deploy main bot to VPS |
-| `monitor_vps.py` | Monitor VPS health/metrics |
-| `test_vps_connection.py` | Test VPS SSH connectivity |
-| `start_services.sh` | Start bot services on VPS |
-| `stop_services.sh` | Stop bot services on VPS |
-| `setup_vps.sh` | Initial VPS setup script |
 
 ---
 
@@ -278,7 +228,6 @@ Created at runtime, not in git.
 | Error fixing | `MAIN BOT/error_fix.py` |
 | Project detection | `MAIN BOT/project_analyzer.py` |
 | VPS deployment | `MAIN BOT/deploy_vps.py` |
-| VPS scripts (old) | `archive/` |
 | Cloudflare Workers | `vibesdk/` |
 | Documentation | `docs/CODEMAPS/` |
 
