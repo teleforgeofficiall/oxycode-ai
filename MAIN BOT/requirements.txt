@@ -6,3 +6,7 @@ python-dotenv>=1.0.0
 asyncpg>=0.29.0
 aiofiles>=23.0
 edge-tts>=6.1.0
+fastapi>=0.100.0
+uvicorn>=0.23.0
+PyJWT>=2.8.0
+pydantic>=2.0.0

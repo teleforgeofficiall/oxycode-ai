@@ -1,116 +1,139 @@
 # Files Codemap
 
-**Last Updated:** 2026-08-20
+**Last Updated:** 2026-08-21
 
 ## Project Root
 
 ```
 C:\Users\Teleforge\Desktop\OXYCODE AI BOT\
-├── ARCHITECTURE.md          # High-level system architecture
-├── README.md                # Project overview and setup
-├── DOCS_UPDATE_LOG.md       # Documentation changelog
-├── CLAUDE.md                # Claude Code configuration
-├── .gitignore               # Git ignore rules
+├── README.md                    # Project overview and setup
+├── .gitignore                   # Git ignore rules
 │
-├── MAIN BOT/                # Production bot deployment
-├── CLONE BOT/               # Clone/staging variant
-├── archive/                 # Archived VPS deployment scripts
-├── docs/                    # Documentation (codemaps)
-└── .opencode/               # OpenCode configuration
+├── MAIN BOT/                    # Production bot deployment (18 files)
+├── CLONE BOT/                   # Clone/staging variant (11 files)
+├── vibesdk/                     # Cloudflare Workers SDK (active)
+├── vibesdk-read/                # Cloudflare Workers SDK (read-only reference)
+└── docs/                        # Documentation (codemaps)
 ```
 
 ---
 
 ## MAIN BOT/
 
-Production deployment of OXYGENT Telegram bot.
+Production deployment of OXYGENT Telegram bot with full feature set.
 
 | File | Lines | Purpose | Key Exports |
 |------|-------|---------|-------------|
-| `main.py` | 1265+ | Entry point, handlers, orchestration | Telegram bot setup, all command/callback handlers |
-| `config.py` | ~150 | Environment variables, model configs, messages | `TELEGRAM_TOKEN`, `AI_MODELS`, `MESSAGES`, `CREDIT_PACKAGES` |
-| `database.py` | ~200 | PostgreSQL async operations, connection pooling | `Database` class, `db` singleton |
-| `agent_engine.py` | ~300 | Hermes-style AI agent loop | `AgentEngine` class, `agent_engine` singleton |
-| `coding_tools.py` | ~250 | 7-tool sandbox for code/file operations | `CodingTools` class, `coding_tools` singleton |
-| `payments.py` | ~150 | Telegram Stars payment processing | `Payments` class, `payments` singleton |
-| `memory_system.py` | ~150 | Dual-layer memory (file + SQLite) | `HermesMemory`, `MemoryDatabase`, `memory_db` |
-| `requirements.txt` | ~20 | Python dependencies | `python-telegram-bot>=20.0`, `asyncpg`, `aiohttp` |
+| `main.py` | 459 | Entry point, Telegram handlers, admin panel | Command/callback handlers, bot setup |
+| `config.py` | 210 | Environment variables, AI models, messages | `BOT_TOKEN`, `ADMIN_IDS`, `OPENCODE_ZEN_*`, `SYSTEM_PROMPT` |
+| `database.py` | 1348 | PostgreSQL operations, connection pooling | `_POOL`, `get_user()`, `add_user()`, `save_payment()` |
+| `agent_engine.py` | 664 | Hermes-style AI agent loop | `agent_build()` |
+| `coding_tools.py` | 775 | 7-tool sandbox for code/file operations | `read_file()`, `write_file()`, `terminal()`, `web_search()` |
+| `payments.py` | 101 | Telegram Stars payment processing | `STAR_PACKAGES`, `get_buy_keyboard()`, `handle_successful_payment()` |
+| `memory_system.py` | 509 | Triple-layer memory (file + DB + unified) | `HermesMemory`, `MemoryDatabase`, `OxygentMemory`, `get_memory()` |
+| `context_engine.py` | 159 | Token tracking, auto-compaction | `ContextEngine` |
+| `api_server.py` | 833 | FastAPI Mini App backend | All `/api/*` endpoints |
+| `cloudflare_deploy.py` | 349 | CF Pages/Workers deployment | `deploy_to_pages()`, `deploy_to_workers()` |
+| `cloudflare_oauth.py` | 345 | Per-user CF OAuth token management | `cf_api_get()`, `cf_api_post()`, `get_cloudflare_account()` |
+| `error_fix.py` | 232 | AI-powered error detection and auto-repair | `build_fix_prompt()`, `analyze_error()` |
+| `project_analyzer.py` | 330 | Auto-detect project type from prompt | `analyze_prompt()` |
+| `deploy_vps.py` | 186 | SSH-based VPS deployment | `connect_vps()`, `deploy()` |
+| `requirements.txt` | 12 | Python dependencies | `python-telegram-bot`, `psycopg2`, `aiohttp`, `fastapi`, `pyjwt` |
+| `templates/cloudflare_callback.html` | - | Cloudflare OAuth callback page | - |
+| `.env` | - | Environment variables (not in git) | - |
+| `.env.example` | 26 | Example environment config | - |
+| `SECURITY.md` | 91 | Security documentation | - |
 
 ### main.py — Handler Structure
 
 ```
-main.py
-├── Imports (all modules)
-├── Telegram Application setup
+main.py (459 lines)
+├── Imports (telegram, config, database)
+├── Constants (MINI_APP_URL, MAINTENANCE_MSG)
+├── Helper Functions
+│   ├── is_admin(user_id) → bool
+│   ├── is_maintenance_mode() → bool
+│   ├── notify_admins(bot, text)
+│   └── _entities_to_list(entities)
 ├── Command Handlers
-│   ├── /start — Welcome, create user, show menu
-│   ├── /help — Usage instructions
-│   ├── /buy — Show credit packages
-│   ├── /balance — Check remaining credits
-│   ├── /memory — View/manage conversation history
-│   ├── /reset — Clear conversation context
-│   ├── /model — Switch AI model (if allowed)
-│   └── /channels — Manage linked Telegram channels
-├── Callback Query Handlers
-│   ├── buy_package_* — Package selection callbacks
-│   ├── confirm_purchase — Purchase confirmation
-│   ├── channel_* — Channel management callbacks
-│   └── memory_* — Memory management callbacks
+│   ├── /start — Welcome message, Mini App button
+│   ├── /admin — Admin panel (maintenance toggle, stats)
+│   ├── /selftest — Health check
+│   └── (future: /menu, /create, /status, /voice, etc.)
+├── Callback Handlers
+│   ├── admin_toggle_maintenance — Toggle maintenance mode
+│   ├── admin_stats — Show bot statistics
+│   └── (future: session, payment callbacks)
 ├── Message Handlers
-│   ├── Text messages → agent_engine.process_message()
-│   ├── Pre-checkout queries → payments.handle_pre_checkout()
-│   └── Successful payments → payments.handle_successful_payment()
-├── Error Handler
-│   └── Global exception catching and logging
+│   └── Non-command messages → maintenance check
+├── Bot Setup
+│   └── Application builder, handler registration
 └── Main
     └── Application.run_polling()
+```
+
+### api_server.py — Endpoint Structure
+
+```
+api_server.py (833 lines)
+├── Config (BOT_TOKEN, JWT_SECRET, OPENCODE_ZEN_*)
+├── Middleware
+│   ├── CORS (allow all origins for dev)
+│   └── MaintenanceMiddleware (blocks non-admins when maintenance ON)
+├── Auth Endpoints
+│   ├── POST /api/auth/telegram — Verify initData, return JWT
+│   └── GET /api/user/me — Get current user profile
+├── Project Endpoints
+│   ├── GET /api/projects — List user's projects
+│   ├── POST /api/projects — Create new project
+│   ├── GET /api/projects/:id — Get project details
+│   └── DELETE /api/projects/:id — Delete project
+├── AI Endpoints
+│   ├── POST /api/chat — Send message to AI
+│   └── GET /api/limits — Get daily limits
+├── Deployment Endpoints
+│   ├── POST /api/deploy — Deploy to Cloudflare
+│   ├── POST /api/fix — AI error analysis
+│   ├── POST /api/fix/apply — Apply fixes and redeploy
+│   └── GET /api/deployments — List deployed projects
+├── Cloudflare OAuth Endpoints
+│   ├── GET /api/cloudflare/status — Check connection
+│   ├── GET /api/cloudflare/auth-url — Get auth URL
+│   ├── GET /api/cloudflare/callback — Handle callback
+│   └── DELETE /api/cloudflare/disconnect — Disconnect account
+└── Main
+    └── uvicorn.run()
 ```
 
 ---
 
 ## CLONE BOT/
 
-Clone/staging variant with 2 additional modules.
+Clone/staging variant with core modules. Uses shared PostgreSQL schema.
 
 | File | Lines | Purpose | Differences from MAIN |
 |------|-------|---------|----------------------|
-| `main.py` | ~1200 | Same structure as MAIN BOT | Uses `config.from_main_bot = True` |
-| `config.py` | ~160 | Configuration with clone flag | Has `from_main_bot = True` to share MAIN config |
-| `database.py` | ~200 | Same PostgreSQL operations | Identical to MAIN |
-| `agent_engine.py` | ~300 | Same agent loop | Identical to MAIN |
-| `coding_tools.py` | ~250 | Same 7 tools | Identical to MAIN |
-| `payments.py` | ~150 | Same payment system | Identical to MAIN |
-| `memory_system.py` | ~150 | Same dual memory | Identical to MAIN |
-| **`context_engine.py`** | ~120 | **Token tracking, auto-compaction** | **CLONE BOT only** |
-| **`tools.py`** | ~100 | **Alternate SQLite memory system** | **CLONE BOT only** |
-| `requirements.txt` | ~20 | Same dependencies | Identical to MAIN |
+| `main.py` | 3200 | Full bot with all handlers | Expanded handlers, no API server |
+| `config.py` | 146 | Configuration | Shares MAIN BOT config values |
+| `database.py` | 1186 | Same PostgreSQL operations | Uses `OXYGENT_SCHEMA=clone` |
+| `agent_engine.py` | 875 | Same agent loop | Extended version |
+| `coding_tools.py` | 881 | Same 7 tools | Extended version |
+| `payments.py` | 84 | Same payment system | Identical to MAIN |
+| `memory_system.py` | 485 | Same triple memory | Identical to MAIN |
+| `tools.py` | 770 | **Extended memory + tools** | **CLONE BOT only** |
+| `requirements.txt` | ~12 | Same dependencies | Identical to MAIN |
+| `README.md` | ~50 | Clone-specific docs | - |
+| `.env` | - | Environment variables | Uses `OXYGENT_SCHEMA=clone` |
 
 ### CLONE BOT Unique Files
 
-#### context_engine.py
-```
-Purpose: Monitor token usage and auto-compact long conversations
-Class: ContextEngine
-Methods:
-  - track_tokens(messages) → int
-  - should_compact(messages) → bool
-  - compact(messages) → list[dict]
-  - get_token_usage(user_id) → dict
-Strategy:
-  - Count tokens in message list
-  - When exceeding threshold, summarize older messages
-  - Keep recent N messages in full
-```
-
 #### tools.py
 ```
-Purpose: SQLite-only memory system (no file-based storage)
-Class: MemorySystem
-Methods:
-  - save(user_id, key, value) → None
-  - get(user_id, key) → str or None
-  - search(user_id, query) → list[dict]
-  - delete(user_id, key) → None
+Purpose: Extended memory system with SQLite + file operations
+Classes:
+  - MemorySystem: SQLite-based key-value store
+  - Extended file tools (read, write, search, patch, terminal)
+  - Web search integration
 Storage: SQLite database (./data/tools.db)
 ```
 
@@ -133,6 +156,68 @@ VPS deployment and management scripts (not actively used).
 
 ---
 
+## vibesdk/
+
+Cloudflare Workers SDK for the OXYCODE platform.
+
+```
+vibesdk/
+├── worker/                    # Main worker code
+│   ├── utils/                 # Utility modules
+│   │   ├── authUtils.ts       # Authentication
+│   │   ├── cryptoUtils.ts     # Encryption
+│   │   ├── deployToCf.ts      # CF deployment
+│   │   ├── dispatcherUtils.ts # Request dispatching
+│   │   ├── encoding.ts        # Encoding utils
+│   │   ├── envs.ts            # Environment config
+│   │   ├── ErrorHandling.ts   # Error handling
+│   │   ├── githubUtils.ts     # GitHub integration
+│   │   ├── idGenerator.ts     # ID generation
+│   │   ├── images.ts          # Image processing
+│   │   ├── inputValidator.ts  # Input validation
+│   │   ├── jwtUtils.ts        # JWT handling
+│   │   ├── oauthCookie.ts     # OAuth cookies
+│   │   ├── ownerPreviewToken.ts
+│   │   ├── passwordService.ts # Password hashing
+│   │   ├── pathUtils.ts       # Path utilities
+│   │   ├── screenshot-security.ts
+│   │   ├── spacePreviewToken.ts
+│   │   ├── stateSigning.ts    # State signing
+│   │   ├── timeFormatter.ts   # Time formatting
+│   │   ├── tokenEncryption.ts # Token encryption
+│   │   ├── urls.ts            # URL utilities
+│   │   ├── validationUtils.ts # Validation
+│   │   └── wsTicketManager.ts # WebSocket tickets
+│   ├── types/                 # TypeScript types
+│   │   ├── appenv.ts          # App environment
+│   │   ├── auth-types.ts      # Auth types
+│   │   ├── env.d.ts           # Environment types
+│   │   ├── image-attachment.ts
+│   │   └── secretsTemplates.ts
+│   └── services/              # Service modules
+│       └── static-analysis/   # Code analysis
+├── container/                 # Container management
+│   ├── cli-tools.ts
+│   ├── process-monitor.ts
+│   ├── storage.ts
+│   └── types.ts
+├── packages/                  # Shared packages
+│   └── artifacts-viewer/      # Artifact viewer UI
+├── scripts/                   # Build/deploy scripts
+│   ├── deploy.ts
+│   ├── dev-browser-sidecar.ts
+│   ├── setup.ts
+│   └── undeploy.ts
+├── migrations/                # Database migrations
+├── docs/                      # API documentation
+├── debug-tools/               # Debug utilities
+├── package.json
+├── drizzle.config.local.ts
+└── drizzle.config.remote.ts
+```
+
+---
+
 ## docs/
 
 Documentation directory.
@@ -140,7 +225,7 @@ Documentation directory.
 ```
 docs/
 └── CODEMAPS/
-    ├── ARCHITECTURE.md    # System overview, data flow
+    ├── ARCHITECTURE.md    # System overview, data flow, diagrams
     ├── MODULES.md         # Module docs, APIs, dependencies
     └── FILES.md           # This file
 ```
@@ -153,7 +238,8 @@ Created at runtime, not in git.
 
 | Path | Purpose | Format |
 |------|---------|--------|
-| `./memory/` | HermesMemory file storage | `{telegram_id}.json` |
+| `/tmp/oxygent_sandbox/{uid}/{sid}/` | Per-user session sandboxes | Files |
+| `./memory/` | HermesMemory file storage | `{telegram_id}/MEMORY.md`, `USER.md` |
 | `./data/` | SQLite databases | `memory.db`, `tools.db` |
 | `./.agent/` | Agent working state | Various |
 | `./logs/` | Application logs | `.log` files |
@@ -164,10 +250,12 @@ Created at runtime, not in git.
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `CLAUDE.md` | Project root | Claude Code session instructions |
 | `.gitignore` | Project root | Git ignore rules |
-| `.opencode/` | Project root | OpenCode IDE configuration |
+| `.env` | Each bot | Environment variables (not in git) |
+| `.env.example` | MAIN BOT | Example environment config |
 | `requirements.txt` | Each bot | Python package dependencies |
+| `SECURITY.md` | MAIN BOT | Security documentation |
+| `CLAUDE.md` | Project root | Claude Code session instructions |
 
 ---
 
@@ -175,7 +263,8 @@ Created at runtime, not in git.
 
 | What | Where |
 |------|-------|
-| Entry point | `MAIN BOT/main.py`, `CLONE BOT/main.py` |
+| Telegram bot entry | `MAIN BOT/main.py` |
+| Mini App API backend | `MAIN BOT/api_server.py` |
 | All config | `*/config.py` |
 | Database layer | `*/database.py` |
 | AI agent loop | `*/agent_engine.py` |
@@ -183,9 +272,14 @@ Created at runtime, not in git.
 | Payment system | `*/payments.py` |
 | Memory (file) | `*/memory_system.py` → `./memory/` |
 | Memory (SQLite) | `*/memory_system.py` → `./data/memory.db` |
-| Token tracking | `CLONE BOT/context_engine.py` |
-| Alternate memory | `CLONE BOT/tools.py` |
-| VPS scripts | `archive/` |
+| Token tracking | `MAIN BOT/context_engine.py` |
+| CF OAuth | `MAIN BOT/cloudflare_oauth.py` |
+| CF Deployment | `MAIN BOT/cloudflare_deploy.py` |
+| Error fixing | `MAIN BOT/error_fix.py` |
+| Project detection | `MAIN BOT/project_analyzer.py` |
+| VPS deployment | `MAIN BOT/deploy_vps.py` |
+| VPS scripts (old) | `archive/` |
+| Cloudflare Workers | `vibesdk/` |
 | Documentation | `docs/CODEMAPS/` |
 
 ---

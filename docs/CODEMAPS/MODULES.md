@@ -1,16 +1,28 @@
 # Modules Codemap
 
-**Last Updated:** 2026-08-20
+**Last Updated:** 2026-08-21
 
 ## Module Dependency Graph
 
 ```
-                    config.py
-                   /         \
-          database.py     agent_engine.py
-             |               /        \
-         payments.py   coding_tools.py  memory_system.py
-                         (standalone)     (standalone)
+                         config.py
+                        /    |    \
+                       /     |     \
+              database.py  agent_engine.py  error_fix.py
+                 |           /        \           |
+             payments.py  coding_tools.py  cloudflare_deploy.py
+                          (standalone)          |
+                                         cloudflare_oauth.py
+                                               |
+                                          database.py
+
+  MAIN BOT only:                    CLONE BOT only:
+  - api_server.py                   - tools.py
+  - cloudflare_deploy.py            (context_engine in MAIN BOT)
+  - cloudflare_oauth.py
+  - error_fix.py
+  - project_analyzer.py
+  - deploy_vps.py
 ```
 
 ---
@@ -24,101 +36,125 @@
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `TELEGRAM_TOKEN` | `str` | Telegram Bot API token |
-| `AI_MODELS` | `list[dict]` | Available AI model configs (name, url, max_tokens) |
-| `get_random_model()` | `function` | Returns random model from AI_MODELS |
-| `CreditPackage` | `NamedTuple` | (id, stars, credits, label, description) |
-| `CREDIT_PACKAGES` | `list[CreditPackage]` | Available purchase tiers |
-| `MESSAGES` | `dict[str, str]` | All bot response templates |
-| `RATE_LIMIT_SECONDS` | `int` | Cooldown between user requests (default: 30) |
-| `MAX_MESSAGE_LENGTH` | `int` | Telegram message character limit |
-| `AI_REQUEST_TIMEOUT` | `int` | HTTP timeout for AI API calls |
-| `MAX_CONVERSATION_HISTORY` | `int` | Context window size |
+| `BOT_TOKEN` | `str` | Telegram Bot API token |
+| `ADMIN_IDS` | `list[int]` | Admin user IDs (default: 8972944701, 7371674958) |
+| `AGENT_NAME` | `str` | Bot display name ("OXYCODE") |
+| `OPENCODE_ZEN_BASE_URL` | `str` | AI API base URL |
+| `OPENCODE_ZEN_MODEL` | `str` | Primary AI model (default: mimo-v2.5-free) |
+| `OPENCODE_ZEN_FALLBACKS` | `list[str]` | Fallback models for rate-limit rotation |
+| `DATABASE_URL` | `str` | PostgreSQL connection string |
+| `WELCOME_MESSAGE` | `str` | HTML-formatted welcome message |
+| `HELP_MESSAGE` | `str` | HTML-formatted help message |
+| `SYSTEM_PROMPT` | `str` | Full AI personality and behavior rules |
+| `MAX_SESSIONS` | `int` | Max code sessions per user (5) |
+| `REFERRAL_BONUS` | `int` | Credits for referral (20) |
+| `DEFAULT_DAILY_LIMIT` | `int` | Free tier daily limit (20) |
+| `MAINTENANCE_MODE` | `bool` | Global maintenance toggle |
 
-**Dependencies:** `os`, `logging`
+**Dependencies:** `os`, `dotenv`
 
-**Key Constants:**
-- Models: `opus-lite`, `nemotron`, `qwen3-coder` (free tier, no API key)
-- Limits: `MAX_FILE_SIZE = 10000`, `MAX_SEARCH_RESULTS = 5`, `MAX_PATCH_SIZE = 5000`
-- Paths: `./memory/`, `./data/`, `./.agent/`
+**AI Models (Free Tier):**
+- Primary: `mimo-v2.5-free`
+- Fallbacks: `deepseek-v4-flash-free`, `hy3-free`, `nemotron-3.5-lightning-free`, `nemotron-3-ultra-free`, `laguna-s-2.1-free`
 
 ---
 
 ## 2. database.py
 
-**Purpose:** PostgreSQL database layer using asyncpg. Handles all persistent storage operations for users, sessions, payments, and channels.
+**Purpose:** PostgreSQL database layer using psycopg2 with connection pooling. Handles all persistent storage for users, sessions, payments, channels, deployments, and Cloudflare tokens.
 
 **Location:** `MAIN BOT/database.py`, `CLONE BOT/database.py`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `Database` | `class` | Main database interface with connection pool |
-| `db` | `Database` | Module-level singleton instance |
-
-**Database Class Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `connect()` | `async` | Initialize connection pool, run migrations |
-| `disconnect()` | `async` | Close pool |
-| `get_user(telegram_id)` | `User or None` | Lookup user by Telegram ID |
-| `create_user(telegram_id, username, first_name)` | `User` | Create new user record |
-| `get_or_create_user(...)` | `User` | Atomic get-or-create |
-| `update_user_credits(user_id, delta)` | `User` | Adjust credit balance |
-| `get_free_tier_user(telegram_id)` | `User` | Create/return free-tier user |
-| `save_session(user_id, messages, model_used)` | `ConversationSession` | Persist chat session |
-| `get_active_session(user_id)` | `ConversationSession or None` | Get current session |
-| `save_payment(user_id, package_id, amount, ...)` | `Payment` | Record payment |
-| `save_channel(user_id, channel_link, channel_name)` | `Channel` | Save Telegram channel |
-| `get_user_channels(user_id)` | `list[Channel]` | List user's channels |
-| `update_channel_tokens(channel_id, tokens_used)` | `Channel` | Update token count |
-| `get_channels_needing_repost()` | `list[Channel]` | Channels due for repost |
-
-**Dependencies:** `asyncpg`, `config.py`
+| `_POOL` | `SimpleConnectionPool` | Connection pool (5-50 connections) |
+| `get_db()` | `function` | Get pooled database connection |
+| `add_user(user_id, username, first_name)` | `function` | Add or update user |
+| `get_user(user_id)` | `function` | Get user by Telegram ID |
+| `update_voice_pref(user_id, enabled, gender)` | `function` | Set voice preferences |
+| `get_voice_pref(user_id)` | `function` | Get voice preferences |
+| `get_maintenance_mode()` | `function` | Check maintenance status |
+| `set_maintenance_mode(enabled)` | `function` | Toggle maintenance mode |
+| `create_session(user_id, name, type)` | `function` | Create code session |
+| `get_user_sessions(user_id)` | `function` | Get user's sessions |
+| `payment_exists(charge_id)` | `function` | Idempotency check |
+| `save_payment(...)` | `function` | Record Telegram Stars payment |
+| `get_setting(key)` | `function` | Get admin setting |
+| `set_setting(key, value)` | `function` | Set admin setting |
+| `get_user_profile(user_id)` | `function` | Get full user profile (single query) |
+| `get_bot_stats()` | `function` | Get comprehensive bot statistics |
+| `add_deployment(...)` | `function` | Record deployment |
+| `get_user_deployments(uid)` | `function` | Get user's deployments |
 
 **Database Tables:**
-- `users` — Telegram user profiles, credit balances, free_tier flag
-- `conversation_sessions` — Chat history, model usage, timestamps
-- `payments` — Transaction records (Telegram Stars)
-- `channels` — Linked Telegram channels, token tracking
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts, limits, voice prefs, referral codes |
+| `channels` | Force-join Telegram channels |
+| `user_states` | Conversation flow states |
+| `code_sessions` | Code creation sessions with context |
+| `payments` | Telegram Stars transactions |
+| `broadcasts` | Broadcast message log |
+| `settings` | Admin-configurable limits |
+| `workers` | Cloudflare Worker hosting info |
+| `deployments` | Deployed projects (Vercel/Cloudflare) |
+| `projects` | Mini App projects |
+| `daily_messages` | Daily message tracking for Mini App |
+| `cloudflare_accounts` | Per-user Cloudflare OAuth tokens |
+
+**Dependencies:** `psycopg2`, `config.py`
+
+**Safety:**
+- Refuses to start without valid PostgreSQL URL (no SQLite fallback)
+- Schema isolation via `OXYGENT_SCHEMA` env var
+- All user_id columns are BIGINT (Telegram 64-bit IDs)
+- Connection pool with automatic validation and recycling
 
 ---
 
 ## 3. agent_engine.py
 
-**Purpose:** Hermes-style AI agent loop. Orchestrates multi-turn conversations with tool calling, model rotation, and sandboxed execution.
+**Purpose:** Hermes-style autonomous coding agent. Implements the THINK→ACT→OBSERVE loop with tool calling, model rotation, and sandboxed execution.
 
 **Location:** `MAIN BOT/agent_engine.py`, `CLONE BOT/agent_engine.py`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `AgentEngine` | `class` | Main agent orchestrator |
-| `agent_engine` | `AgentEngine` | Module-level singleton instance |
+| `agent_build(uid, sid, user_message, ...)` | `async function` | Main entry: full agent build cycle |
 
-**AgentEngine Class Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `process_message(user_id, message, context)` | `async → str` | Main entry: full agent cycle |
-| `_build_system_prompt()` | `str` | System prompt with tool definitions |
-| `_call_ai_model(messages, model)` | `async → str` | HTTP call to OpenCode Zen |
-| `_execute_tool(tool_name, args)` | `str` | Run tool in sandbox |
-| `_rotate_model(failed_model)` | `dict` | Select next model on failure |
-| `_save_context(user_id, messages)` | `async` | Persist conversation |
-| `_load_context(user_id)` | `async → list` | Retrieve conversation history |
+**Agent Build Flow:**
+```
+agent_build(uid, sid, message)
+  → Create sandbox: /tmp/oxygent_sandbox/{uid}/{sid}/
+  → Load conversation context
+  → Build system prompt with tool definitions
+  → Enter agent loop (max 8 turns):
+      → Call OpenCode Zen API
+      → Parse tool_calls from response
+      → Execute tool in sandbox
+      → Feed result back as role:"tool" message
+  → Collect all files from sandbox
+  → Return {ok, files, summary, session_name}
+```
 
-**Agent Loop Pattern:**
+**Model Rotation:**
 ```
-while iterations < MAX_ITERATIONS:
-    response = call_ai_model(messages, model)
-    if response contains tool_call:
-        result = execute_tool(tool_name, args)
-        messages.append(tool_result)
-    else:
-        return response  # Final answer
-    iterations += 1
-return "Max iterations reached"
+Primary (mimo-v2.5-free)
+  → 429/502? → Backoff 2s → Try next fallback
+  → deepseek-v4-flash-free
+  → hy3-free
+  → nemotron-3.5-lightning-free
+  → nemotron-3-ultra-free
+  → laguna-s-2.1-free
 ```
+
+**Safety Features:**
+- Path jail prevents sandbox escapes (no ".." or absolute paths)
+- Per-user asyncio.Lock serializes builds
+- Blocked commands: rm -rf, mkfs, dd, shutdown, pip install, curl, wget
+- Approval required for: write_file, patch_file, terminal, execute_code
 
 **Dependencies:** `config.py`, `coding_tools.py`
 
@@ -126,154 +162,123 @@ return "Max iterations reached"
 
 ## 4. coding_tools.py
 
-**Purpose:** 7-tool sandbox for code execution, file operations, and web search. All operations are isolated and size-limited.
+**Purpose:** 7-tool sandbox for code execution, file operations, and web search. All operations are isolated to the sandbox directory.
 
 **Location:** `MAIN BOT/coding_tools.py`, `CLONE BOT/coding_tools.py`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `CodingTools` | `class` | Tool execution engine |
-| `coding_tools` | `CodingTools` | Module-level singleton instance |
-
-**Available Tools:**
-| Tool | Parameters | Description |
-|------|------------|-------------|
-| `read_file` | `file_path: str` | Read file contents (up to `MAX_FILE_SIZE` bytes) |
-| `write_file` | `file_path: str, content: str` | Write/create files in sandbox |
-| `search_files` | `pattern: str` | Glob search for files |
-| `patch_file` | `file_path: str, old_text: str, new_text: str` | String replacement in files |
-| `terminal` | `command: str` | Execute shell command (sandboxed) |
-| `execute_code` | `code: str, language: str` | Run code in subprocess |
-| `web_search` | `query: str` | Search web via API |
-
-**Tool Schema (for AI):**
-```json
-{
-  "name": "read_file",
-  "description": "Read file contents",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "file_path": {"type": "string", "description": "Path to file"}
-    },
-    "required": ["file_path"]
-  }
-}
-```
-
-**Dependencies:** None (standalone module)
+| `read_file(filepath)` | `async function` | Read file content |
+| `write_file(filepath, content)` | `async function` | Create/overwrite files |
+| `search_files(pattern, path)` | `async function` | Search by filename or content |
+| `patch_file(filepath, old, new)` | `async function` | Find/replace edits |
+| `terminal(command, timeout)` | `async function` | Execute sandboxed shell commands |
+| `execute_code(code, language)` | `async function` | Run Python/JS snippets |
+| `web_search(query)` | `async function` | DuckDuckGo search |
 
 **Safety Limits:**
 - `MAX_FILE_SIZE`: 10,000 bytes
-- `MAX_SEARCH_RESULTS`: 5 results
+- `MAX_SEARCH_RESULTS`: 5
 - `MAX_PATCH_SIZE`: 5,000 bytes
 - `MAX_OUTPUT_LENGTH`: 2,000 chars
-- `MAX_TERMINAL_OUTPUT`: 2,000 chars
-- All tool outputs truncated to prevent context overflow
+- Blocked commands list enforced
+
+**Dependencies:** None (standalone module)
 
 ---
 
 ## 5. payments.py
 
-**Purpose:** Telegram Stars payment integration. Handles credit packages, invoice generation, and payment confirmation.
+**Purpose:** Telegram Stars payment integration. Handles credit packages, invoice generation, and payment confirmation with idempotency.
 
 **Location:** `MAIN BOT/payments.py`, `CLONE BOT/payments.py`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `Payments` | `class` | Payment processing engine |
-| `payments` | `Payments` | Module-level singleton instance |
-
-**Payments Class Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `create_invoice(package)` | `LabeledPrice` | Generate Telegram Stars invoice |
-| `handle_pre_checkout(pre_checkout_query)` | `async` | Validate & approve pre-checkout |
-| `handle_successful_payment(update, context)` | `async` | Process completed payment |
-| `get_user_balance(user_id)` | `int` | Query remaining credits |
+| `STAR_PACKAGES` | `list[dict]` | Available credit packages |
+| `get_buy_keyboard()` | `function` | Inline keyboard for package selection |
+| `create_invoice(package)` | `function` | Generate Telegram Stars invoice |
+| `handle_pre_checkout(query)` | `async function` | Validate & approve pre-checkout |
+| `handle_successful_payment(update)` | `async function` | Process completed payment |
 
 **Credit Packages:**
-| Package | Stars | Credits | Price |
-|---------|-------|---------|-------|
-| starter | 100 | 100 | 100 ⭐ |
-| pro | 500 | 600 | 500 ⭐ |
-| business | 1000 | 1500 | 1000 ⭐ |
+| Stars | Credits | Price/Credit |
+|-------|---------|--------------|
+| 3 | 10 | 0.30 ⭐ |
+| 10 | 35 | 0.29 ⭐ |
+| 30 | 120 | 0.25 ⭐ |
+| 100 | 400 | 0.25 ⭐ |
+| 300 | 1500 | 0.20 ⭐ |
 
-**Dependencies:** `database.py`
+**Dependencies:** `database.py`, `telegram` (LabeledPrice, InlineKeyboardButton)
 
 ---
 
 ## 6. memory_system.py
 
-**Purpose:** Dual-layer memory system combining file-based conversation storage (HermesMemory) with SQLite metadata indexing (MemoryDatabase).
+**Purpose:** Triple-layer memory system combining file-based storage (HermesMemory), PostgreSQL (MemoryDatabase), and unified interface (OxygentMemory).
 
 **Location:** `MAIN BOT/memory_system.py`, `CLONE BOT/memory_system.py`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `HermesMemory` | `class` | File-based conversation memory |
-| `MemoryDatabase` | `class` | SQLite metadata store |
-| `memory_db` | `MemoryDatabase` | Module-level SQLite instance |
+| `HermesMemory` | `class` | File-based memory (MEMORY.md, USER.md) |
+| `MemoryDatabase` | `class` | PostgreSQL-backed structured storage |
+| `OxygentMemory` | `class` | Unified interface combining both layers |
+| `get_memory(user_id)` | `function` | Factory for OxygentMemory instances |
 
-**HermesMemory Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `save_conversation(user_id, messages)` | `None` | Write to `./memory/{user_id}.json` |
-| `load_conversation(user_id)` | `list[dict]` | Read conversation history |
-| `clear_conversation(user_id)` | `None` | Delete user's memory file |
+**HermesMemory (File-based):**
+- `MEMORY.md`: Agent's personal notes about the user (4000 char limit)
+- `USER.md`: User profile (2000 char limit)
+- Entry delimiter: `§` (Hermes style)
 
-**MemoryDatabase Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `connect()` | `async` | Initialize SQLite connection |
-| `save_context(user_id, messages, model)` | `None` | Store context with metadata |
-| `get_context(user_id, limit)` | `list` | Retrieve recent contexts |
-| `extract_keywords(messages)` | `list[str]` | Extract searchable keywords |
+**MemoryDatabase (PostgreSQL):**
+- Structured key-value storage
+- Conversation history tracking
+- Category-based organization
 
-**Storage Paths:**
-- File memory: `./memory/{telegram_id}.json`
-- SQLite: `./data/memory.db`
-- Agent data: `./.agent/`
+**Auto-Detection:**
+- Names ("mera naam Rahul" → name: Rahul)
+- Favorites ("mujhe pizza pasand" → favourite: pizza)
+- Age, City, Occupation from natural language
 
 **Dependencies:** None (standalone module)
 
 ---
 
-## 7. context_engine.py (CLONE BOT only)
+## 7. context_engine.py
 
-**Purpose:** Token tracking and automatic context compaction for long conversations. Monitors token usage and triggers compaction when approaching limits.
+**Purpose:** Token tracking and automatic context compaction. Monitors token usage and triggers summarization when approaching limits.
 
-**Location:** `CLONE BOT/context_engine.py`
+**Location:** `MAIN BOT/context_engine.py`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
 | `ContextEngine` | `class` | Token tracking and compaction engine |
-| `context_engine` | `ContextEngine` | Module-level singleton instance |
 
 **ContextEngine Methods:**
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `track_tokens(messages)` | `int` | Count tokens in message list |
-| `should_compact(messages)` | `bool` | Check if compaction needed |
-| `compact(messages)` | `list[dict]` | Summarize old messages |
-| `get_token_usage(user_id)` | `dict` | User's token consumption stats |
+| `set_system_prompt(prompt)` | `None` | Set system prompt (max 3000 chars) |
+| `add_message(role, content)` | `None` | Add message, estimate tokens, auto-compact |
+| `_compact()` | `None` | Summarize old messages when >80% capacity |
 
-**Compaction Strategy:**
-- When token count exceeds threshold, summarize older messages
-- Keep recent N messages in full
-- Replace older messages with summaries
+**Limits:**
+- `MAX_CONTEXT_TOKENS`: 4,000
+- `COMPACTION_THRESHOLD`: 0.8 (compact at 80%)
+- Token estimation: ~4 chars per token
 
-**Dependencies:** `config.py`
+**Dependencies:** None (standalone module)
 
 ---
 
-## 8. tools.py (CLONE BOT only)
+## 8. tools.py
 
-**Purpose:** Alternate memory system implementation using SQLite only (no file-based memory).
+**Purpose:** Alternate SQLite-only memory system used in CLONE BOT. Simpler than memory_system.py — no file-based layer.
 
 **Location:** `CLONE BOT/tools.py`
 
@@ -290,30 +295,225 @@ return "Max iterations reached"
 | `search(user_id, query)` | `list[dict]` | Search stored memory |
 | `delete(user_id, key)` | `None` | Remove entry |
 
-**Dependencies:** None (uses SQLite directly)
+**Storage:** SQLite database (`./data/tools.db`)
+
+**Dependencies:** None (uses sqlite3 directly)
+
+---
+
+## 9. api_server.py (MAIN BOT only)
+
+**Purpose:** FastAPI backend for the Telegram Mini App web dashboard. Handles JWT authentication, project management, AI chat proxy, Cloudflare deployment, and error fixing.
+
+**Location:** `MAIN BOT/api_server.py`
+
+**Key Endpoints:**
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/auth/telegram` | Verify Telegram initData, return JWT |
+| GET | `/api/user/me` | Get current user profile |
+| GET | `/api/projects` | List user's projects |
+| POST | `/api/projects` | Create new project |
+| GET | `/api/projects/:id` | Get project details |
+| DELETE | `/api/projects/:id` | Delete project |
+| POST | `/api/chat` | Send message to AI, get response |
+| GET | `/api/limits` | Get user's daily limits |
+| POST | `/api/deploy` | Deploy to Cloudflare |
+| POST | `/api/fix` | AI error analysis |
+| POST | `/api/fix/apply` | Apply fixes and redeploy |
+| GET | `/api/deployments` | List deployed projects |
+| GET | `/api/cloudflare/status` | Check Cloudflare connection |
+| GET | `/api/cloudflare/auth-url` | Get OAuth authorization URL |
+| GET | `/api/cloudflare/callback` | Handle OAuth callback |
+| DELETE | `/api/cloudflare/disconnect` | Disconnect Cloudflare account |
+
+**Dependencies:** `fastapi`, `jwt`, `database.py`, `config.py`, `error_fix.py`, `cloudflare_oauth.py`, `cloudflare_deploy.py`
+
+**Auth Flow:**
+```
+Frontend sends Telegram initData
+  → Verify HMAC signature with BOT_TOKEN
+  → Extract user_id, username, first_name
+  → Generate JWT (7-day expiry)
+  → Return token + user profile
+```
+
+**Middleware:**
+- CORS (allow all origins for dev)
+- MaintenanceMiddleware (blocks non-admins when maintenance ON)
+
+---
+
+## 10. cloudflare_oauth.py (MAIN BOT only)
+
+**Purpose:** Per-user Cloudflare account connection via OAuth. Each user connects their own CF account for deploying projects.
+
+**Location:** `MAIN BOT/cloudflare_oauth.py`
+
+**Key Exports:**
+| Export | Type | Description |
+|--------|------|-------------|
+| `get_cloudflare_account(telegram_id)` | `function` | Get user's CF account info |
+| `is_cloudflare_connected(telegram_id)` | `function` | Check if user has connected CF account |
+| `save_cloudflare_account(...)` | `function` | Save CF account credentials |
+| `remove_cloudflare_account(telegram_id)` | `function` | Disconnect CF account |
+| `cf_api_get(telegram_id, path)` | `function` | Authenticated CF API GET |
+| `cf_api_post(telegram_id, path, data)` | `function` | Authenticated CF API POST |
+| `cf_api_put(telegram_id, path, data)` | `function` | Authenticated CF API PUT |
+
+**OAuth Flow:**
+```
+User clicks "Connect Cloudflare"
+  → Redirect to CF OAuth authorization
+  → User authorizes
+  → CF redirects back with auth code
+  → Exchange code for API token
+  → Save to cloudflare_accounts table
+```
+
+**Required CF Token Scopes:**
+- Workers Scripts: Edit
+- Workers KV Storage: Edit
+- Workers R2 Storage: Edit
+- Cloudflare Pages: Edit
+- Zone Settings: Read
+- DNS: Read/Write
+
+**Database Table:** `cloudflare_accounts`
+- `user_id` (BIGINT, PK)
+- `api_token` (TEXT)
+- `account_id` (TEXT)
+- `account_name` (TEXT)
+- `email` (TEXT)
+- `connected_at` (TIMESTAMP)
+- `updated_at` (TIMESTAMP)
+
+**Dependencies:** `database.py`, `aiohttp`
+
+---
+
+## 11. cloudflare_deploy.py (MAIN BOT only)
+
+**Purpose:** Deploy user projects to Cloudflare Pages and Workers using the user's connected Cloudflare account.
+
+**Location:** `MAIN BOT/cloudflare_deploy.py`
+
+**Key Exports:**
+| Export | Type | Description |
+|--------|------|-------------|
+| `deploy_to_pages(telegram_id, project_name, files)` | `async function` | Deploy static site to CF Pages |
+| `deploy_to_workers(telegram_id, script_name, script)` | `async function` | Deploy worker script |
+
+**Deployment Flow:**
+```
+Agent calls deploy_website/deploy_bot tool
+  → Get user's CF token from database
+  → Create zip of project files
+  → POST to CF Pages API or PUT to Workers API
+  → Return live URL
+```
+
+**Dependencies:** `cloudflare_oauth.py`
+
+---
+
+## 12. error_fix.py (MAIN BOT only)
+
+**Purpose:** AI-powered error detection and auto-repair for deployed projects. Analyzes errors and generates fixes using OpenCode AI.
+
+**Location:** `MAIN BOT/error_fix.py`
+
+**Key Exports:**
+| Export | Type | Description |
+|--------|------|-------------|
+| `build_fix_prompt(error_type, error_message, project_files, ...)` | `function` | Build AI prompt for error analysis |
+| `analyze_error(...)` | `async function` | Get AI fix suggestion |
+| `apply_fix(...)` | `async function` | Apply fix and redeploy |
+
+**Error Types Handled:**
+- HTTP errors (404, 500, CORS)
+- JavaScript runtime errors
+- Build/compilation errors
+- Missing resources
+- Deployment failures
+
+**Dependencies:** `config.py`
+
+---
+
+## 13. project_analyzer.py (MAIN BOT only)
+
+**Purpose:** Auto-detects project type, tech stack, and deployment target from user prompts using keyword matching (no AI call needed).
+
+**Location:** `MAIN BOT/project_analyzer.py`
+
+**Key Exports:**
+| Export | Type | Description |
+|--------|------|-------------|
+| `analyze_prompt(prompt)` | `function` | Analyze prompt → project metadata |
+
+**Return Shape:**
+```python
+{
+    "projectType": "website" | "telegram-bot" | "miniapp" | "api" | ...,
+    "techStack": ["react", "typescript", "tailwind"],
+    "deploymentTarget": "cloudflare-pages" | "cloudflare-workers" | "vercel" | "none",
+    "files": ["index.html", "style.css"],
+    "runCommand": "npm start",
+    "description": "One-line description"
+}
+```
+
+**Dependencies:** None (standalone module)
+
+---
+
+## 14. deploy_vps.py (MAIN BOT only)
+
+**Purpose:** SSH-based VPS deployment script using paramiko. Uploads bot + API to a remote server.
+
+**Location:** `MAIN BOT/deploy_vps.py`
+
+**Key Functions:**
+| Function | Description |
+|----------|-------------|
+| `connect_vps()` | SSH connection to VPS |
+| `run_cmd(client, cmd)` | Execute remote command |
+| `upload_file(sftp, local, remote)` | Upload file via SFTP |
+| `deploy()` | Full deployment sequence |
+
+**Dependencies:** `paramiko`
 
 ---
 
 ## Cross-Module Relationships
 
 ```
-main.py
-  │
-  ├─── config.py ──────────────────────── (no deps)
-  │
-  ├─── database.py ────────────────────── depends on: config
-  │
-  ├─── agent_engine.py ────────────────── depends on: config, coding_tools
-  │
-  ├─── coding_tools.py ────────────────── (no deps)
-  │
-  ├─── payments.py ────────────────────── depends on: database
-  │
-  └─── memory_system.py ───────────────── (no deps)
+MAIN BOT:
+  main.py
+    ├── config.py ─────────────────── (no deps)
+    ├── database.py ───────────────── depends on: config
+    ├── agent_engine.py ───────────── depends on: config, coding_tools
+    ├── coding_tools.py ───────────── (no deps)
+    ├── payments.py ───────────────── depends on: database
+    ├── memory_system.py ──────────── (no deps)
+    ├── context_engine.py ─────────── (no deps)
+    ├── api_server.py ─────────────── depends on: database, config, error_fix
+    ├── cloudflare_oauth.py ───────── depends on: database
+    ├── cloudflare_deploy.py ──────── depends on: cloudflare_oauth
+    ├── error_fix.py ──────────────── depends on: config
+    ├── project_analyzer.py ───────── (no deps)
+    └── deploy_vps.py ─────────────── (no deps)
 
-CLONE BOT extras:
-  ├─── context_engine.py ──────────────── depends on: config
-  └─── tools.py ───────────────────────── (no deps)
+CLONE BOT:
+  main.py
+    ├── config.py ─────────────────── (no deps, shares MAIN config)
+    ├── database.py ───────────────── depends on: config
+    ├── agent_engine.py ───────────── depends on: config, coding_tools
+    ├── coding_tools.py ───────────── (no deps)
+    ├── payments.py ───────────────── depends on: database
+    ├── memory_system.py ──────────── (no deps)
+    └── tools.py ──────────────────── (no deps, SQLite-only memory)
 ```
 
 ## Related Codemaps

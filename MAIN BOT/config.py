@@ -32,11 +32,11 @@ load_dotenv()
 # Bot Token
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Admin User IDs
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+# Admin User IDs — only these IDs can use the bot
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "8972944701,7371674958").split(",") if x.strip()]
 
 # Agent Configuration
-AGENT_NAME = "OXYGENT"
+AGENT_NAME = "OXYCODE"
 AGENT_TEAM = "OXYCODE TEAM"
 
 # OpenCode Zen Configuration (No API Key needed for free models)
@@ -54,27 +54,20 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 # ==================== WELCOME & HELP MESSAGES ====================
 
-WELCOME_MESSAGE = """<b>Hey! I'm OXYGENT! 👾</b>
-Made by <b>OXYCODE TEAM</b>
+WELCOME_MESSAGE = """<b>Welcome to OXYCODE AI! 👾</b>
 
 ━━━━━━━━━━━━━━━━━━━━
 
-<blockquote class="expandable"><b>Your personal AI Coding Buddy! 🤖</b>
+<blockquote class="expandable"><b>Build anything with AI 🤖</b>
 
 <b>What I can do:</b>
 • Write code in any language
 • Debug your errors
 • Build Websites, Bots & Apps
-• Explain code — in plain English!
-• Talk to me with your voice</blockquote>
+• Deploy to Cloudflare</blockquote>
 
-<blockquote><b>Get Started:</b>
-Just say anything — <i>"Build a Python calculator"</i> or <i>"Fix this JS error"</i></blockquote>
-
-<b>Commands:</b>
-<blockquote>/start  •  /help  •  /status  •  /voice  •  /background</blockquote>
-
-<b>Tip:</b> while I'm building, use <code>/background &lt;question&gt;</code> to ask something else!"""
+<b>Get Started:</b>
+Tap the button below to open the Mini App!"""
 
 HELP_MESSAGE = """<b>OXYGENT — Commands</b>
 
@@ -212,3 +205,6 @@ REFERRAL_BONUS = 20
 # Default settings (can be overridden in admin panel)
 DEFAULT_DAILY_LIMIT = 20
 DEFAULT_REFERRAL_BONUS = 20
+
+# Maintenance Mode
+MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"

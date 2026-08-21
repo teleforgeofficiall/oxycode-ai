@@ -392,6 +392,30 @@ def init_db():
         )
     ''')
 
+    # Projects table (Mini App projects)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS projects (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            name TEXT NOT NULL,
+            prompt TEXT,
+            project_type TEXT DEFAULT 'website',
+            status TEXT DEFAULT 'created',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Daily message tracking for Mini App limits
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS daily_messages (
+            user_id BIGINT NOT NULL,
+            date TEXT NOT NULL,
+            count INTEGER DEFAULT 1,
+            PRIMARY KEY (user_id, date)
+        )
+    ''')
+
     # Add new columns to users table if they don't exist (safe for existing DB)
     _new_cols = [
         "referral_code TEXT",
@@ -415,6 +439,7 @@ def init_db():
     # Default settings
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('daily_limit', '20'))
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('referral_bonus', '20'))
+    cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('maintenance_mode', 'false'))
 
     conn.commit()
     conn.close()
@@ -569,6 +594,26 @@ def get_daily_limit():
         return int(get_setting('daily_limit', '20'))
     except (ValueError, TypeError):
         return 20
+
+
+# ==================== MAINTENANCE MODE ====================
+
+def get_maintenance_mode():
+    """Check if bot is in maintenance mode."""
+    val = get_setting('maintenance_mode', 'false')
+    return val == 'true'
+
+
+def set_maintenance_mode(enabled):
+    """Set maintenance mode on or off."""
+    set_setting('maintenance_mode', 'true' if enabled else 'false')
+
+
+def toggle_maintenance():
+    """Toggle maintenance mode. Returns new state."""
+    current = get_maintenance_mode()
+    set_maintenance_mode(not current)
+    return not current
 
 
 # ==================== REFERRAL SYSTEM ====================
@@ -789,6 +834,44 @@ def get_all_channels():
     channels = cursor.fetchall()
     conn.close()
     return [dict(c) for c in channels]
+
+
+# Alias for simplified bot
+get_channels = get_all_channels
+
+
+def resolve_referral_code(code):
+    """Resolve a referral code to the referrer's user_id.
+    Returns referrer's user_id or None if not found.
+    """
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute(
+        'SELECT user_id FROM users WHERE referral_code = %s',
+        (code,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row["user_id"] if row else None
+
+
+def credit_referral(referrer_id, new_user_id):
+    """Credit bonus messages to referrer and mark new user as referred."""
+    conn = get_db()
+    cursor = conn.cursor()
+    # Credit referrer with bonus
+    cursor.execute(
+        'UPDATE users SET bonus_messages = bonus_messages + 20 WHERE user_id = %s',
+        (referrer_id,)
+    )
+    # Mark new user as referred
+    cursor.execute(
+        'UPDATE users SET referred_by = %s WHERE user_id = %s AND referred_by IS NULL',
+        (referrer_id, new_user_id)
+    )
+    conn.commit()
+    conn.close()
+    return True
 
 
 def get_channel(channel_id):
