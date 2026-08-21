@@ -153,3 +153,32 @@ export interface FileType {
 
 // Image attachment constants
 export const SUPPORTED_IMAGE_TYPES = SUPPORTED_IMAGE_MIME_TYPES;
+
+// Rate limit and security types (used by api-client.ts)
+export interface RateLimitError {
+  type: 'rate_limit';
+  message: string;
+  retryAfter?: number;
+}
+
+export class RateLimitExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitExceededError';
+  }
+}
+
+export enum SecurityErrorType {
+  CSRF_VIOLATION = 'csrf_violation',
+  RATE_LIMITED = 'rate_limited',
+  UNAUTHORIZED = 'unauthorized',
+}
+
+export class SecurityError extends Error {
+  type: SecurityErrorType;
+  constructor(type: SecurityErrorType, message: string) {
+    super(message);
+    this.name = 'SecurityError';
+    this.type = type;
+  }
+}

@@ -1,7 +1,7 @@
 import { useAuth } from '@/contexts/auth-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { ArrowLeft, User, CreditCard, Bot, Cloud, Plug, ArrowSquareOut, Spinner, CheckCircle } from '@phosphor-icons/react';
+import { ArrowLeft, User, CreditCard, Robot, Cloud, Plug, ArrowSquareOut, Spinner, CheckCircle } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -157,7 +157,7 @@ export default function SettingsPage() {
         <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
           <div className="flex items-center gap-3 mb-3">
             <div className="size-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <Bot className="size-5 text-purple-500" />
+              <Robot className="size-5 text-purple-500" />
             </div>
             <div>
               <h2 className="font-semibold text-kumo-default">AI Provider</h2>
