@@ -58,3 +58,4 @@ cli
 tsconfig.tsbuildinfo
 
 APIS.md
+.vercel
