@@ -1,0 +1,223 @@
+You are building a Telegram MiniApp interface for an AI coding bot called "OXYGENT". This is a web app that opens inside Telegram via WebAppInfo. Build a complete, production-ready MiniApp dashboard with 5 screens.
+
+## DESIGN SYSTEM — BLACK + 3D DARK GLOSSY / BEVELED UI
+
+### Colors
+- Background: #000000 pure black
+- Card surface: #0a0a0a with glossy overlay
+- Card hover: #111111
+- Beveled border light: #333333 (top-left edges)
+- Beveled border dark: #000000 (bottom-right edges)
+- Primary accent: #00d4ff electric blue (with glow effect)
+- Success: #00ff88 neon green
+- Error: #ff3366 hot pink
+- Warning: #ffaa00 amber
+- Text primary: #ffffff
+- Text secondary: #888888
+- Text muted: #555555
+
+### Typography
+- Headings: 'Orbitron', sans-serif (futuristic, bold)
+- Body: 'Inter', system sans-serif
+- Code: 'JetBrains Mono', monospace
+- Logo/Brand: 'Rajdhani', bold
+
+### 3D Effects (CRITICAL — this is what makes it look premium)
+- Cards: Multi-layer box-shadow for depth:
+  box-shadow: 0 2px 4px rgba(0,0,0,0.8), 0 8px 16px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)
+- Beveled borders: 2px solid with ridge effect:
+  border: 2px solid;
+  border-color: #333 #000 #000 #333; (light top-left, dark bottom-right)
+- Metallic sheen overlay on cards:
+  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 50%, rgba(0,0,0,0.3) 100%)
+- Inner glow on focus/hover:
+  box-shadow: 0 0 15px rgba(0,212,255,0.3), inset 0 0 15px rgba(0,212,255,0.1)
+- Embossed text effect:
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8), 0 -1px 0 rgba(255,255,255,0.1)
+
+### Buttons
+- Default state (raised/outset):
+  background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%)
+  border: 2px solid; border-color: #444 #111 #111 #444;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)
+- Pressed state (inset/groove):
+  border-color: #111 #444 #444 #111;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.8)
+  transform: translateY(1px)
+- Primary button (electric blue glow):
+  background: linear-gradient(180deg, #00e5ff 0%, #0099cc 100%)
+  box-shadow: 0 0 20px rgba(0,212,255,0.4), 0 4px 8px rgba(0,0,0,0.6)
+  border-color: #33ddff #006699 #006699 #33ddff
+- Success button:
+  background: linear-gradient(180deg, #00ff88 0%, #00cc6a 100%)
+  box-shadow: 0 0 20px rgba(0,255,136,0.4), 0 4px 8px rgba(0,0,0,0.6)
+- Danger button:
+  background: linear-gradient(180deg, #ff3366 0%, #cc1144 100%)
+  box-shadow: 0 0 20px rgba(255,51,102,0.4), 0 4px 8px rgba(0,0,0,0.6)
+
+### Input Fields
+- Background: #0d0d0d
+- Border: 2px ridge #333
+- Focus: border-color: #00d4ff; box-shadow: 0 0 10px rgba(0,212,255,0.3)
+- Inner shadow for depth: inset 0 2px 4px rgba(0,0,0,0.6)
+
+### Status Badges
+- Glossy pill shape with metallic gradient
+- Live: green gradient + green glow
+- Draft: amber gradient + amber glow
+- Error: red gradient + red glow
+
+### Loading States
+- Shimmer effect on skeleton elements
+- Animated gradient sweep from left to right
+- Pulsing glow on active elements
+
+### Layout
+- Mobile-first: 375px viewport width
+- Border radius: 16px for cards, 12px for buttons, 8px for inputs
+- Spacing: 16px padding, 12px gaps
+- Smooth transitions: 0.3s cubic-bezier(0.4, 0, 0.2, 1)
+
+## SCREEN 1: MiniApp Builder Home
+Layout:
+- Top bar: Back arrow (←) left, "OXYGENT MiniApp" title center (Orbitron font), settings gear icon right
+- All elements on pure black #000000 background
+- Hero card with beveled border + glossy overlay:
+  - App name (large, bold, Orbitron, white with text-shadow)
+  - Status badge: "Draft" (amber glossy pill) / "Live" (green glowing pill) / "Error" (red pulsing pill)
+  - "Last edited: 2 min ago" (grey text, Inter)
+  - Metallic sheen gradient overlay on card surface
+- Action buttons row (3 buttons, equal width):
+  - "Build" (green glossy, raised state, hammer icon, green glow shadow)
+  - "Preview" (beveled outline, blue border, eye icon, inner glow on hover)
+  - "Deploy" (electric blue glossy, rocket icon, blue glow shadow)
+- Quick stats section (3 beveled mini-cards in a row):
+  - "Files: 5" | "Size: 12KB" | "Uptime: 99.9%"
+  - Each with metallic gradient background
+- Recent activity feed (3 items, each in a subtle beveled row):
+  - "✅ Deployed to Vercel" - 2 min ago
+  - "📝 Edited index.html" - 5 min ago
+  - "🔨 Built successfully" - 8 min ago
+  - Separator lines with beveled groove effect
+
+## SCREEN 2: MiniApp Configuration Form
+Layout:
+- Top bar: ← Back | "Configure" title (Orbitron) | ✓ Save (green icon)
+- Pure black background
+- Form sections with labels (Orbitron for section headers, Inter for labels):
+  SECTION: Basic Info (beveled container)
+  - App Name: glossy black input, placeholder "My MiniApp", character count "0/50", blue focus glow
+  - Description: glossy textarea, placeholder "Describe what your MiniApp does...", 3 rows
+  - App Icon: glossy button with emoji picker (default: 🚀) + upload image option
+  
+  SECTION: Appearance (beveled container)
+  - Theme Color: glossy color picker row with preset glowing circles (#00d4ff, #7c3aed, #059669, #ff3366) + custom hex input
+  - Background Color: glossy color picker with presets (#000000, #0a0a0a, #111111, #1a1a2e)
+  - Header Style: glossy segmented control "Light" | "Dark" | "Auto" with active glow
+  
+  SECTION: Bot Integration (beveled container)
+  - Bot Token: glossy password input with eye toggle, placeholder "123456:ABC-DEF..."
+  - Welcome Message: glossy textarea, placeholder "Welcome! Tap the button below to get started."
+  - Main Button Label: glossy input, placeholder "Get Started", default "Get Started"
+  - Main Button Color: glossy color picker (default: #00d4ff)
+  
+  SECTION: Advanced (collapsible, starts collapsed)
+  - "Advanced Settings" with chevron icon, beveled header, tap to expand
+  - Expanded shows glossy inputs:
+    - Deep Link: input, placeholder "myapp-action-name"
+    - Custom CSS: code editor textarea (JetBrains Mono, #0d0d0d bg, #00d4ff text)
+    - JavaScript: code editor textarea (JetBrains Mono, #0d0d0d bg, #00d4ff text)
+    - "Reset to Default" danger button (red glossy)
+
+- Bottom: "Save & Build" full-width electric blue glossy button with glow
+
+## SCREEN 3: MiniApp Preview (Phone Mockup)
+Layout:
+- Top bar: ← Back | "Preview" title (Orbitron) | Share icon
+- Phone frame (iPhone-style, beveled metallic border, notch at top, glossy black body):
+  - Inside phone:
+    - Status bar: time "9:41", signal icons, battery (white on black)
+    - Telegram-style header: app name (Orbitron), three-dot menu, glossy dark bg
+    - Content area (scrollable, dark themed):
+      - Welcome text from config (white on black)
+      - Placeholder content cards (2-3 glossy beveled cards)
+      - Images/icons placeholder (dark with subtle glow)
+    - Main Button: full-width, electric blue glossy, with label text, blue glow
+- Below phone frame:
+  - "Open in Telegram" electric blue glossy button (full width, blue glow)
+  - "Copy Link" beveled outline button
+  - "Share" beveled outline button
+- Device switcher: "📱 Mobile" | "📱 Tablet" | "🖥️ Desktop" glossy tabs
+
+## SCREEN 4: Deploy Status
+Layout:
+- Top bar: ← Back | "Deploying..." title (Orbitron, animated dots) | gear icon spinning
+- Pure black background
+- Progress steps (vertical timeline, left-aligned icons with glow):
+  Step 1: "Building Frontend" - ✅ Green glowing check, "3 files compiled", green text-shadow
+  Step 2: "Deploying to Vercel" - ✅ Green glowing check, URL in blue (#00d4ff)
+  Step 3: "Creating Telegram Bot" - 🔄 Blue spinning ring with glow, "Registering with BotFather..."
+  Step 4: "Linking Bot to Frontend" - ⏳ Grey dim, "Pending"
+  Step 5: "Going Live" - ⏳ Grey dim, "Pending"
+  
+- Connection diagram (after step 3):
+  Bot Icon (glossy beveled) ←→ Vercel Icon (glossy beveled) with animated dashed line (blue glow pulse)
+  
+- Results section (shown after all steps complete):
+  - "Deployment Successful!" green glossy banner with confetti emoji, green glow
+  - URL card 1: "Frontend URL" with copy button (glossy card, blue URL text)
+    https://myapp.vercel.app
+  - URL card 2: "Bot URL" with copy button (glossy card, blue URL text)
+    @MyMiniAppBot
+  - URL card 3: "Deep Link" with copy button (glossy card, blue URL text)
+    https://t.me/MyMiniAppBot?startapp=action
+  
+  - "Open MiniApp" full-width electric blue glossy button
+  - "Open Bot" full-width green glossy button
+  - "Back to Dashboard" beveled outline button
+
+- Error state (if any step fails):
+  - Red glossy error banner with exclamation icon, red glow
+  - Failed step highlighted in red with red glow
+  - "Fix using AI" red glossy button
+  - "Retry Deploy" blue glossy button
+  - "Cancel" grey beveled button
+
+## SCREEN 5: My MiniApps Dashboard
+Layout:
+- Top bar: "My MiniApps" title (Orbitron) | Filter icon | Sort icon
+- Pure black #000000 background
+- Stats bar (3 glossy mini-cards): "3 Apps" | "2 Live" | "1 Draft"
+- Grid of MiniApp cards (2 columns, gap 12px):
+  Each card (glossy beveled with metallic sheen):
+  - Glowing top border (unique color per app, neon glow effect)
+  - App icon (emoji, large, with subtle glow)
+  - App name (bold, Orbitron, 1 line, ellipsis overflow)
+  - Status badge (glossy pill with glow: Live=green glow, Draft=amber glow, Error=red glow)
+  - "Last edited: X ago" (grey text, small)
+  - Quick actions row (glossy icon buttons):
+    - 👁️ Preview (icon button, blue glow on hover)
+    - ✏️ Edit (icon button, blue glow on hover)
+    - 🗑️ Delete (icon button, red glow on hover)
+  
+- Empty state (when no apps):
+  - Large illustration (phone with + icon, glossy 3D style)
+  - "No MiniApps yet" (Orbitron, white, text-shadow)
+  - "Create your first MiniApp and deploy it to Telegram" (grey)
+  - "Create MiniApp" electric blue glossy button (centered, blue glow)
+
+- Floating Action Button (bottom right):
+  - Electric blue glossy circle with + icon
+  - Blue glow shadow: box-shadow: 0 0 20px rgba(0,212,255,0.5)
+  - Tap opens glossy popup: "New MiniApp" | "Import from Session"
+
+## INTERACTION DETAILS
+- All buttons: raised (outset) default → pressed (inset) on tap
+- Hover states: inner glow appears, slight brightness increase
+- Loading states: shimmer effect on skeleton elements (animated gradient sweep)
+- Toast notifications: glossy black with colored left border, slide in from top
+- Swipe to delete on mobile for MiniApp cards
+- Pull to refresh on dashboard (spinner with blue glow)
+- Smooth page transitions: slide left/right with 0.3s cubic-bezier
+- Active elements pulse with subtle glow animation
+- Scrollbar: thin, dark, with blue thumb

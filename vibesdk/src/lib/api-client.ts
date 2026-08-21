@@ -76,8 +76,12 @@ class ApiClient {
   }
 
   // Chat
-  async sendMessage(data: { message: string; project_id?: string }) {
-    return this.request('POST', '/api/chat', data);
+  async sendMessage(data: { message: string; projectId?: number }) {
+    return this.request<{ response: string; model: string; remaining: number }>(
+      'POST',
+      '/api/chat',
+      data
+    );
   }
 
   // Limits
