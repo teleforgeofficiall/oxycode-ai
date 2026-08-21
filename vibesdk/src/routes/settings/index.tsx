@@ -176,7 +176,7 @@ export default function SettingsPage() {
       <div className="sticky top-0 z-10 bg-bg-2/80 dark:bg-kumo-canvas/80 backdrop-blur-md border-b border-kumo-line">
         <div className="flex items-center gap-3 px-4 py-3">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/')}
             className="size-9 rounded-lg flex items-center justify-center text-kumo-subtle hover:text-kumo-default hover:bg-bg-4/50 transition-colors"
           >
             <ArrowLeft className="size-5" />
