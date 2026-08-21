@@ -92,6 +92,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!initData || !tgUser) {
         // Not in Telegram Mini App — use stored credentials if available
+        const storedToken = localStorage.getItem('oxycode_token');
+        const storedUser = localStorage.getItem('oxycode_user');
+        if (storedToken && storedUser && !token && !user) {
+          setToken(storedToken);
+          try {
+            setUser(JSON.parse(storedUser));
+          } catch {
+            localStorage.removeItem('oxycode_user');
+          }
+        }
         setIsLoading(false);
         return;
       }
