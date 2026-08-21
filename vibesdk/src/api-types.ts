@@ -229,3 +229,31 @@ export interface WebSocketMessageData {
   type: string;
   data: any;
 }
+
+// Code fix edits
+export interface CodeFixEdits {
+  type: string;
+  filePath: string;
+  oldContent: string;
+  newContent: string;
+}
+
+// Agent behavior helpers
+export const MAX_AGENT_QUERY_LENGTH = 10000;
+
+export function isAgenticLikeBehavior(behavior: BehaviorType): boolean {
+  return behavior === 'agentic' || behavior === 'think';
+}
+
+export function getBehaviorTypeForProject(projectType?: ProjectType): BehaviorType {
+  if (projectType === 'telegram-bot') return 'think';
+  return 'agentic';
+}
+
+// Rate limit error class
+export class RateLimitExceededError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitExceededError';
+  }
+}

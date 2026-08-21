@@ -3,6 +3,7 @@
  */
 
 import { Component, ReactNode } from 'react';
+import { useNavigate } from 'react-router';
 import { AlertCircle } from 'lucide-react';
 
 interface ErrorFallbackProps {
@@ -10,7 +11,7 @@ interface ErrorFallbackProps {
   resetError: () => void;
 }
 
-function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
+function ErrorFallbackInner({ error, resetError, onGoHome }: ErrorFallbackProps & { onGoHome: () => void }) {
   const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -35,13 +36,18 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           <button onClick={resetError} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg">
             Try Again
           </button>
-          <button onClick={() => window.location.href = '/'} className="px-4 py-2 border rounded-lg">
+          <button onClick={onGoHome} className="px-4 py-2 border rounded-lg">
             Go Home
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+function ErrorFallback(props: ErrorFallbackProps) {
+  const navigate = useNavigate();
+  return <ErrorFallbackInner {...props} onGoHome={() => navigate('/')} />;
 }
 
 interface ErrorBoundaryProps {

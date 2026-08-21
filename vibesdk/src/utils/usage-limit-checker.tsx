@@ -100,7 +100,7 @@ function createNotConfiguredDialog(onClose: () => void): React.ReactElement {
 						type="button"
 						onClick={() => {
 							onClose();
-							window.location.href = '/settings?config_needed=true';
+							window.location.href = '/profile?config_needed=true';
 						}}
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>
@@ -246,7 +246,7 @@ function createDeployNotConfiguredDialog(onClose: () => void): React.ReactElemen
 						type="button"
 						onClick={() => {
 							onClose();
-							window.location.href = '/settings?config_needed=true';
+							window.location.href = '/profile?config_needed=true';
 						}}
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>

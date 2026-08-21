@@ -22,6 +22,10 @@ const routes = [
           </ProtectedRoute>
         ),
       },
+      {
+        path: '*',
+        Component: Home,
+      },
     ],
   },
 ] satisfies RouteObject[];
