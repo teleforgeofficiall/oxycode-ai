@@ -51,18 +51,31 @@ function getTelegramUser(): TelegramUser | null {
 async function authenticateWithBackend(
   initData: string,
 ): Promise<{ token: string; user: TelegramUser }> {
-  const response = await fetch(`${API_BASE}/api/auth/telegram`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ initData: initData }),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ detail: 'Auth failed' }));
-    throw new Error(error.detail || 'Authentication failed');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE}/api/auth/telegram`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: initData }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Auth failed' }));
+        throw new Error(error.detail || 'Authentication failed');
+      }
+
+      return response.json();
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error('Network error');
+      if (attempt === 0) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
   }
 
-  return response.json();
+  throw lastError;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -89,6 +102,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function initAuth() {
       const initData = getTelegramInitData();
       const tgUser = getTelegramUser();
+
+      // Helper for display name
+      const getDisplayName = (u: TelegramUser | null) => u?.first_name || 'User';
+      const getInitial = (u: TelegramUser | null) => (u?.first_name?.[0] || 'U').toUpperCase();
 
       if (!initData || !tgUser) {
         // Not in Telegram Mini App — use stored credentials if available

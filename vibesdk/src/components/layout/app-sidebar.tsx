@@ -5,6 +5,7 @@ import { Sidebar, cn, useSidebar } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { useRecentApps } from '@/hooks/use-apps';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { UserAvatar } from '@/components/user-avatar';
 
 interface App {
 	id: string;
@@ -172,19 +173,32 @@ export function AppSidebar() {
 					</button>
 				)}
 
-				{/* Collapsed profile avatar */}
-				{isCollapsed && user && (
-					<button
-						onClick={() => navigateAndClose('/profile')}
-						className="flex items-center justify-center mb-1.5"
-					>
-						<div className="size-8 rounded-full bg-brand-emphasis/20 flex items-center justify-center text-sm font-bold text-brand-emphasis">
-							{user.firstName?.charAt(0) || '👤'}
-						</div>
-					</button>
-				)}
+			{/* Collapsed profile avatar */}
+			{isCollapsed && user && (
+				<button
+					onClick={() => navigateAndClose('/profile')}
+					className="flex items-center justify-center mb-1.5"
+				>
+					<div className="size-8 rounded-full bg-brand-emphasis/20 flex items-center justify-center text-sm font-bold text-brand-emphasis">
+						{user.firstName?.charAt(0) || '👤'}
+					</div>
+				</button>
+			)}
 
-				<div className="flex w-full min-w-0 items-center gap-2">
+			{user && (
+				<div className="flex items-center gap-2 px-2 py-1.5">
+					<UserAvatar
+						photoUrl={user.photo_url}
+						name={user.first_name || 'User'}
+						size="sm"
+					/>
+					<span className="text-xs text-kumo-subtle truncate">
+						{user.first_name}
+					</span>
+				</div>
+			)}
+
+			<div className="flex w-full min-w-0 items-center gap-2">
 					<div className="min-w-0 flex-1">
 						<button
 							onClick={() => navigateAndClose('/profile')}

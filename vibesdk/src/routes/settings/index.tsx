@@ -2,7 +2,8 @@ import React from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { ArrowLeft, User, CreditCard, Robot, Cloud, Plugs, ArrowSquareOut, Spinner, CheckCircle } from '@phosphor-icons/react';
+import { ArrowLeft, CreditCard, Cloud, Plugs, ArrowSquareOut, Spinner, CheckCircle } from '@phosphor-icons/react';
+import { UserAvatar } from '@/components/user-avatar';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -186,6 +187,25 @@ export default function SettingsPage() {
       </div>
 
       <div className="p-4 space-y-4 max-w-lg mx-auto">
+        {/* User Profile */}
+        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
+          <div className="flex items-center gap-4">
+            <UserAvatar
+              photoUrl={user?.photo_url}
+              name={user?.first_name || 'User'}
+              size="lg"
+            />
+            <div>
+              <h2 className="text-lg font-semibold text-kumo-default">
+                {user?.first_name} {user?.last_name || ''}
+              </h2>
+              <p className="text-sm text-kumo-subtle">
+                @{user?.username || 'unknown'} • ID: {user?.id}
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Cloudflare Account Section */}
         <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
           <div className="flex items-center gap-3 mb-3">
@@ -256,27 +276,6 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* AI Provider Section */}
-        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="size-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-              <Robot className="size-5 text-purple-500" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-kumo-default">AI Provider</h2>
-              <p className="text-xs text-kumo-subtle">Powered by OpenCode Zen</p>
-            </div>
-          </div>
-          <div className="rounded-lg bg-bg-3 dark:bg-kumo-elevated p-3">
-            <p className="text-sm text-kumo-subtle">
-              Free models (no API key required)
-            </p>
-            <p className="text-xs text-kumo-subtle mt-1">
-              mimo-v2.5-free → deepseek-v4-flash-free → hy3-free
-            </p>
-          </div>
-        </section>
-
         {/* Daily Usage Section */}
         {limitsError ? (
           <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
@@ -288,22 +287,6 @@ export default function SettingsPage() {
           <DailyUsageSection limitsData={limitsData} limitsLoading={limitsLoading} />
         )}
 
-        {/* Telegram Account Section */}
-        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-lg bg-blue-400/10 flex items-center justify-center">
-              <User className="size-5 text-blue-400" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-kumo-default">
-                {user?.firstName || 'User'}
-              </h2>
-              <p className="text-xs text-kumo-subtle">
-                @{user?.username || 'unknown'} • ID: {user?.id}
-              </p>
-            </div>
-          </div>
-        </section>
       </div>
     </div>
   );
