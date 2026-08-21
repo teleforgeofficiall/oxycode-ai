@@ -357,35 +357,28 @@ async def get_me(telegram_id: int = Depends(get_current_user)):
     user = db_get_user(telegram_id)
     if not user:
         raise HTTPException(404, "User not found")
-
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    msg_count = db_get_user_msg_count(telegram_id, today)
-
+    
+    from database import get_user_usage
+    usage = get_user_usage(telegram_id)
+    
     return {
         "id": telegram_id,
         "username": user.get("username"),
         "firstName": user.get("first_name"),
         "lastName": user.get("last_name"),
-        "dailyMessagesUsed": msg_count,
-        "dailyLimit": FREE_DAILY_LIMIT,
+        "dailyMessagesUsed": usage["used"],
+        "dailyLimit": usage["limit"],
+        "remaining": usage["remaining"],
+        "resetAt": usage["resetAt"],
     }
 
 
 @app.get("/api/limits")
 async def get_limits(telegram_id: int = Depends(get_current_user)):
-    """Get user's daily usage limits."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    msg_count = db_get_user_msg_count(telegram_id, today)
-    remaining = max(0, FREE_DAILY_LIMIT - msg_count)
-
-    return {
-        "dailyLimit": FREE_DAILY_LIMIT,
-        "usedToday": msg_count,
-        "remaining": remaining,
-        "resetsAt": (datetime.now(timezone.utc) + timedelta(days=1)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).isoformat(),
-    }
+    """Get user's daily usage limits (rolling 24h window)."""
+    from database import get_user_usage
+    usage = get_user_usage(telegram_id)
+    return usage
 
 
 @app.get("/api/projects")
@@ -464,14 +457,11 @@ async def chat(req: ChatRequest, telegram_id: int = Depends(get_current_user)):
 
     Uses OpenCode Zen API with model fallbacks.
     """
-    # Check daily limit
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    msg_count = db_get_user_msg_count(telegram_id, today)
-    if msg_count >= FREE_DAILY_LIMIT:
-        raise HTTPException(429, "Daily message limit reached. Resets at midnight UTC.")
-
-    # Increment message count
-    db_increment_msg_count(telegram_id, today)
+    # Check daily limit (rolling 24h)
+    from database import check_and_increment_usage
+    allowed, remaining, reset_at = check_and_increment_usage(telegram_id)
+    if not allowed:
+        raise HTTPException(429, f"Daily message limit reached. Resets at {reset_at}.")
 
     # Build AI request
     messages = [{"role": "user", "content": req.message}]
@@ -504,7 +494,7 @@ async def chat(req: ChatRequest, telegram_id: int = Depends(get_current_user)):
                             return {
                                 "response": content,
                                 "model": model,
-                                "remaining": FREE_DAILY_LIMIT - msg_count - 1,
+                                "remaining": remaining,
                             }
                         body = await resp.text()
                         last_err = f"HTTP {resp.status}: {body[:120]}"

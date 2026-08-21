@@ -308,6 +308,7 @@ async def admin_command(update: Update, context):
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
+        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
         [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
     ])
 
@@ -347,6 +348,7 @@ async def toggle_maintenance_callback(update: Update, context):
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
+        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
         [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
     ])
 
@@ -387,6 +389,7 @@ async def admin_refresh_callback(update: Update, context):
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
+        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
         [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
     ])
 
@@ -394,11 +397,102 @@ async def admin_refresh_callback(update: Update, context):
     await query.answer("Stats refreshed!")
 
 
+async def admin_rate_limit_callback(update: Update, context):
+    """Handle rate limit change button — ask admin to send new value."""
+    query = update.callback_query
+    uid = query.from_user.id
+    await query.answer()
+
+    if not is_admin(uid):
+        await query.answer("⛔ Admin only!", show_alert=True)
+        return
+
+    current_limit = db.get_daily_limit()
+
+    await query.edit_message_text(
+        f"⚙️ <b>Change Rate Limit</b>\n\n"
+        f"Current limit: <code>{current_limit}</code> msgs/24h\n\n"
+        f"Send the new limit value (1-10000):",
+        parse_mode=ParseMode.HTML,
+    )
+
+    # Set user state to waiting for limit value
+    db.set_user_state(uid, "waiting_for_rate_limit")
+
+
+async def handle_admin_rate_limit_input(update: Update, context):
+    """Handle admin sending new rate limit value."""
+    uid = update.effective_user.id
+
+    if not is_admin(uid):
+        return False  # not handled
+
+    # Check if admin is waiting for rate limit input
+    user = db.get_user(uid)
+    if not user or user.get("user_state") != "waiting_for_rate_limit":
+        return False  # not in rate limit flow
+
+    text = update.message.text.strip()
+
+    # Validate input
+    try:
+        new_limit = int(text)
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Invalid input. Please send a number (1-10000):",
+            parse_mode=ParseMode.HTML,
+        )
+        return True
+
+    if new_limit < 1 or new_limit > 10000:
+        await update.message.reply_text(
+            "❌ Value must be between 1 and 10000. Send a valid number:",
+            parse_mode=ParseMode.HTML,
+        )
+        return True
+
+    # Update the limit in DB
+    db.set_setting("daily_limit", str(new_limit))
+    db.clear_user_state(uid)
+
+    # Show confirmation with updated admin panel
+    total_users = db.get_user_count()
+    maintenance = is_maintenance_mode()
+
+    maint_status = "🟢 ON" if maintenance else "🔴 OFF"
+    maint_btn_text = "🔴 Turn Maintenance OFF" if maintenance else "🟢 Turn Maintenance ON"
+    maint_callback = "toggle_maintenance_off" if maintenance else "toggle_maintenance_on"
+
+    text_msg = (
+        f"✅ <b>Daily limit updated to {new_limit} msgs/24h</b>\n\n"
+        f"🛡 <b>{AGENT_NAME} Admin Panel</b>\n\n"
+        f"<b>📊 Stats:</b>\n"
+        f"• Total Users: <code>{total_users}</code>\n"
+        f"• Daily Limit: <code>{new_limit}</code> msgs/user\n"
+        f"• Maintenance: {maint_status}\n\n"
+        f"<b>🔧 Controls:</b>"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
+        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {new_limit})", callback_data="admin_rate_limit")],
+        [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
+    ])
+
+    await update.message.reply_text(text_msg, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    return True
+
+
 # ==================== FALLBACK HANDLERS ====================
 
 async def handle_text(update: Update, context):
     """Handle plain text — show Mini App button or maintenance message."""
     uid = update.effective_user.id
+
+    # Check if admin is in rate limit flow (handled by dedicated handler)
+    user = db.get_user(uid)
+    if user and user.get("user_state") == "waiting_for_rate_limit":
+        return  # already handled by handle_admin_rate_limit_input
 
     # Non-admin blocked
     if not is_admin(uid):
@@ -442,7 +536,15 @@ def main():
     # Callback queries
     app.add_handler(CallbackQueryHandler(check_joined_callback, pattern="^check_joined$"))
     app.add_handler(CallbackQueryHandler(toggle_maintenance_callback, pattern="^toggle_maintenance_(on|off)$"))
+    app.add_handler(CallbackQueryHandler(admin_rate_limit_callback, pattern="^admin_rate_limit$"))
     app.add_handler(CallbackQueryHandler(admin_refresh_callback, pattern="^admin_refresh$"))
+
+    # Admin rate limit input handler (must be before fallback)
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_admin_rate_limit_input,
+        block=False,
+    ))
 
     # Fallback text handler
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))

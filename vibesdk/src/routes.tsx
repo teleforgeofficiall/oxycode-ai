@@ -2,7 +2,7 @@ import type { RouteObject } from 'react-router';
 
 import App from './App';
 import Home from './routes/home';
-import Settings from './routes/settings/index';
+import Profile from './routes/settings/index';
 import { ProtectedRoute } from './routes/protected-route';
 
 const routes = [
@@ -15,10 +15,10 @@ const routes = [
         Component: Home,
       },
       {
-        path: 'settings',
+        path: 'profile',
         element: (
           <ProtectedRoute>
-            <Settings />
+            <Profile />
           </ProtectedRoute>
         ),
       },

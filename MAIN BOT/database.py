@@ -40,7 +40,7 @@ Author: OXYCODE TEAM
 import psycopg2
 import psycopg2.extras
 from psycopg2 import pool as _psy_pool
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from config import DATABASE_URL
 import json
 import time
@@ -426,6 +426,8 @@ def init_db():
         "ref_credited INTEGER DEFAULT 0",
         "voice_enabled INTEGER DEFAULT 0",
         "voice_gender TEXT DEFAULT 'female'",
+        "window_start TIMESTAMP",
+        "prompt_count INTEGER DEFAULT 0",
     ]
     for col in _new_cols:
         col_name = col.split(" ")[0]
@@ -680,6 +682,108 @@ def get_referred_count(referrer_id):
     count = cursor.fetchone()[0]
     conn.close()
     return count
+
+
+# ==================== ROLLING 24H WINDOW ====================
+
+def get_user_usage(user_id):
+    """Get user's rolling 24h usage info."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT window_start, prompt_count FROM users WHERE user_id = %s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    
+    now = datetime.now(timezone.utc)
+    daily_limit = get_daily_limit()
+    
+    if not row or not row[0]:
+        return {
+            "used": 0,
+            "limit": daily_limit,
+            "remaining": daily_limit,
+            "windowStart": None,
+            "windowEnd": None,
+            "resetAt": None,
+        }
+    
+    window_start = row[0]
+    prompt_count = int(row[1] or 0)
+    window_end = window_start + timedelta(hours=24)
+    
+    if now >= window_end:
+        return {
+            "used": 0,
+            "limit": daily_limit,
+            "remaining": daily_limit,
+            "windowStart": None,
+            "windowEnd": None,
+            "resetAt": None,
+        }
+    
+    remaining = max(0, daily_limit - prompt_count)
+    return {
+        "used": prompt_count,
+        "limit": daily_limit,
+        "remaining": remaining,
+        "windowStart": window_start.isoformat(),
+        "windowEnd": window_end.isoformat(),
+        "resetAt": window_end.isoformat(),
+    }
+
+
+def check_and_increment_usage(user_id):
+    """Atomically check and increment usage. Returns (allowed, remaining, reset_at)."""
+    conn = get_db()
+    cur = conn.cursor()
+    
+    now = datetime.now(timezone.utc)
+    daily_limit = get_daily_limit()
+    
+    cur.execute(
+        "SELECT window_start, prompt_count FROM users WHERE user_id = %s",
+        (user_id,),
+    )
+    row = cur.fetchone()
+    
+    window_start = None
+    prompt_count = 0
+    
+    if row and row[0]:
+        window_start = row[0]
+        prompt_count = int(row[1] or 0)
+        window_end = window_start + timedelta(hours=24)
+        
+        if now >= window_end:
+            window_start = now
+            prompt_count = 0
+    
+    if not window_start:
+        window_start = now
+    
+    if prompt_count >= daily_limit:
+        window_end = window_start + timedelta(hours=24)
+        conn.close()
+        return False, 0, window_end.isoformat()
+    
+    cur.execute(
+        """UPDATE users 
+           SET prompt_count = prompt_count + 1, 
+               window_start = COALESCE(window_start, %s)
+           WHERE user_id = %s""",
+        (now, user_id),
+    )
+    conn.commit()
+    
+    new_count = prompt_count + 1
+    remaining = max(0, daily_limit - new_count)
+    window_end = window_start + timedelta(hours=24)
+    
+    conn.close()
+    return True, remaining, window_end.isoformat()
 
 
 # ==================== MESSAGE LIMIT ====================
