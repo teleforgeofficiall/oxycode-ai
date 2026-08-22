@@ -39,16 +39,26 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const API_BASE = import.meta.env.DEV
   ? import.meta.env.VITE_API_BASE || 'http://localhost:8000'
   : '';
+console.log('[Auth] API_BASE:', API_BASE || '(relative - proxy via Vercel)');
 
 function getTelegramInitData(): string | null {
-  const tg = window.Telegram?.WebApp;
-  if (!tg) return null;
-  return tg.initData || null;
+  const tg = (window as any).Telegram?.WebApp;
+  if (!tg) {
+    console.log('[Auth] No Telegram WebApp SDK found');
+    return null;
+  }
+  const data = tg.initData || null;
+  console.log('[Auth] Telegram initData:', data ? `${data.substring(0, 60)}...` : 'empty');
+  return data;
 }
 
 function getTelegramUser(): TelegramUser | null {
-  const tg = window.Telegram?.WebApp;
-  if (!tg?.initDataUnsafe?.user) return null;
+  const tg = (window as any).Telegram?.WebApp;
+  if (!tg?.initDataUnsafe?.user) {
+    console.log('[Auth] No Telegram user in initDataUnsafe');
+    return null;
+  }
+  console.log('[Auth] Telegram user:', tg.initDataUnsafe.user.id, tg.initDataUnsafe.user.first_name);
   return tg.initDataUnsafe.user;
 }
 
@@ -98,12 +108,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!initData || !tgUser) {
         // Not in Telegram — check maintenance from public endpoint
+        console.log('[Auth] Browser access — checking /api/status');
         try {
           const resp = await fetch(`${API_BASE}/api/status`);
           const data = await resp.json();
+          console.log('[Auth] /api/status response:', data);
           setIsMaintenance(data.maintenance);
-        } catch {
-          // If status check fails, assume maintenance is off
+        } catch (err) {
+          console.error('[Auth] Failed to fetch /api/status:', err);
         }
         setIsLoading(false);
         return;
@@ -111,19 +123,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Already authenticated with same user — still call backend for maintenance/isAdmin
       if (token && user?.id === tgUser.id) {
+        console.log('[Auth] Cached user matches — refreshing maintenance status');
         try {
           const result = await authenticateWithBackend(initData);
+          console.log('[Auth] Refresh result:', { maintenance: result.maintenance, isAdmin: result.isAdmin });
           setIsMaintenance(result.maintenance);
           setIsAdmin(result.isAdmin);
         } catch {
-          // Ignore errors — use cached auth state
+          console.log('[Auth] Refresh failed — using cached auth state');
         }
         setIsLoading(false);
         return;
       }
 
       try {
+        console.log('[Auth] Authenticating with backend...');
         const result = await authenticateWithBackend(initData);
+        console.log('[Auth] Auth success:', { userId: result.user.id, maintenance: result.maintenance, isAdmin: result.isAdmin });
         setToken(result.token);
         setUser(result.user);
         setIsMaintenance(result.maintenance);
