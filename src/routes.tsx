@@ -17,14 +17,6 @@ const routes = [
         Component: Home,
       },
       {
-        path: 'chat/:sessionId',
-        element: (
-          <ProtectedRoute>
-            <Chat />
-          </ProtectedRoute>
-        ),
-      },
-      {
         path: 'profile',
         element: (
           <ProtectedRoute>
@@ -33,12 +25,16 @@ const routes = [
         ),
       },
       {
-        path: 'settings',
-        element: <Navigate to="/profile" replace />,
+        path: 'chat/:id',
+        element: (
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        ),
       },
       {
-        path: '*',
-        element: <Navigate to="/" replace />,
+        path: 'settings',
+        element: <Navigate to="/profile" replace />,
       },
     ],
   },

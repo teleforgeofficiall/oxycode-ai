@@ -90,50 +90,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    let cancelled = false;
-
     async function initAuth() {
       const initData = getTelegramInitData();
       const tgUser = getTelegramUser();
 
       if (!initData || !tgUser) {
         // Not in Telegram Mini App — use stored credentials if available
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
         return;
       }
 
       // Already authenticated with same user
-      const storedToken = localStorage.getItem('oxycode_token');
-      const storedUser = localStorage.getItem('oxycode_user');
-      if (storedToken && storedUser) {
-        try {
-          const parsed = JSON.parse(storedUser) as TelegramUser;
-          if (parsed.id === tgUser.id) {
-            if (!cancelled) {
-              setToken(storedToken);
-              setUser(parsed);
-              setIsLoading(false);
-            }
-            return;
-          }
-        } catch {
-          // malformed stored user, proceed with fresh auth
-        }
+      if (token && user?.id === tgUser.id) {
+        setIsLoading(false);
+        return;
       }
 
       try {
         const result = await authenticateWithBackend(initData);
-        if (!cancelled) {
-          setToken(result.token);
-          setUser(result.user);
-          setIsMaintenance(result.maintenance);
-          setIsAdmin(result.isAdmin);
-          localStorage.setItem('oxycode_token', result.token);
-          localStorage.setItem('oxycode_user', JSON.stringify(result.user));
-        }
+        setToken(result.token);
+        setUser(result.user);
+        setIsMaintenance(result.maintenance);
+        setIsAdmin(result.isAdmin);
+        localStorage.setItem('oxycode_token', result.token);
+        localStorage.setItem('oxycode_user', JSON.stringify(result.user));
       } catch (err) {
         console.error('Telegram auth failed:', err);
-        if (cancelled) return;
         // Handle maintenance 503 responses
         if (err instanceof Error && err.message.includes('maintenance')) {
           setIsMaintenance(true);
@@ -147,12 +129,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setToken(null);
         setUser(null);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       }
     }
 
     void initAuth();
-    return () => { cancelled = true; };
   }, []);
 
   const login = useCallback(() => {
