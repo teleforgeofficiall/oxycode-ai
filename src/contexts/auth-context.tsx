@@ -36,7 +36,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const API_BASE = import.meta.env.DEV
+  ? import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+  : '';
 
 function getTelegramInitData(): string | null {
   const tg = window.Telegram?.WebApp;
