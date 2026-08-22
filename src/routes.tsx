@@ -25,7 +25,7 @@ const routes = [
         ),
       },
       {
-        path: 'chat/:id',
+        path: 'chat/:chatId',
         element: (
           <ProtectedRoute>
             <Chat />
