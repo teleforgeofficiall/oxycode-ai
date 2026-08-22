@@ -273,11 +273,12 @@ async def _zen_with_tools(
     system: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
-    Call AI API with tools using dynamic provider system with fallback.
+    Call AI API with tools using provider fallback chain.
     
     Priority:
-    1. Active configured provider (from admin panel)
-    2. Fallback to default OpenCode Zen models
+    1. OpenCode (free, IP-based, no API key) — primary
+    2. Active configured provider from admin panel
+    3. All other working providers
     
     Returns the raw message dict or None if ALL providers/models failed.
     """
@@ -287,16 +288,73 @@ async def _zen_with_tools(
         full = list(messages)
 
     last_err = ""
-    
-    # Try configured provider first
-    provider = providers.get_provider_for_request()
-    if provider:
-        config = providers.get_provider_config(provider)
+
+    # ── 1. Try OpenCode first (free, no API key) ──
+    oc_config = providers.get_opencode_config()
+    oc_base = oc_config["base_url"].rstrip("/")
+    oc_models = oc_config["models"]
+
+    for attempt in range(MAX_ATTEMPTS_PER_TURN * len(oc_models)):
+        current_model = oc_models[attempt % len(oc_models)]
+        payload = {
+            "model": current_model,
+            "messages": full,
+            "tools": tools,
+            "tool_choice": "auto",
+            "stream": False,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "opencode/1.18.16",
+        }
+        chat_url = oc_base + "/chat/completions"
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    chat_url,
+                    headers=headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        if "choices" in data and data["choices"]:
+                            return data["choices"][0]["message"]
+                        last_err = f"empty response from {current_model}"
+                    elif resp.status == 429:
+                        last_err = f"429 rate-limit on {current_model} (OpenCode)"
+                        logger.warning(last_err)
+                    elif resp.status >= 500:
+                        last_err = f"{resp.status} server error on {current_model} (OpenCode)"
+                        logger.warning(last_err)
+                    else:
+                        body = await resp.text()
+                        last_err = f"{resp.status} {body[:120]}"
+                        logger.error(f"OpenCode API error: {last_err}")
+        except asyncio.TimeoutError:
+            last_err = f"timeout on {current_model} (OpenCode) after {HTTP_TIMEOUT}s"
+            logger.warning(last_err)
+        except Exception as e:
+            last_err = f"exception on {current_model} (OpenCode): {e}"
+            logger.error(last_err)
+
+        if "429" in last_err:
+            await asyncio.sleep(min(8.0, BACKOFF_BASE ** min(attempt, 3)))
+        else:
+            await asyncio.sleep(min(2.0, BACKOFF_BASE ** min(attempt, 1)))
+
+    logger.info("OpenCode failed, falling back to configured providers")
+
+    # ── 2. Try active configured provider ──
+    active = providers.get_provider_for_request()
+    if active:
+        config = providers.get_provider_config(active)
         base_url = config["base_url"]
         api_key = config["api_key"]
         model = config["model"]
         models_list = config["models"] or [model]
-        
+
         for attempt in range(MAX_ATTEMPTS_PER_TURN * len(models_list)):
             current_model = models_list[attempt % len(models_list)]
             payload = {
@@ -309,14 +367,11 @@ async def _zen_with_tools(
             headers = {"Content-Type": "application/json"}
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
-            
-            chat_url = f"{base_url.rstrip('/')}"
+
+            chat_url = base_url.rstrip("/")
             if not chat_url.endswith("/chat/completions"):
-                if not chat_url.endswith("/v1"):
-                    chat_url += "/v1/chat/completions"
-                else:
-                    chat_url += "/chat/completions"
-            
+                chat_url = chat_url + ("/chat/completions" if chat_url.endswith("/v1") else "/v1/chat/completions")
+
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
@@ -327,12 +382,11 @@ async def _zen_with_tools(
                     ) as resp:
                         if resp.status == 200:
                             data = await resp.json()
-                            return data["choices"][0]["message"]
+                            if "choices" in data and data["choices"]:
+                                return data["choices"][0]["message"]
+                            last_err = f"empty response from {current_model}"
                         elif resp.status == 429:
-                            last_err = f"429 rate-limit on {current_model}"
-                            logger.warning(last_err)
-                        elif resp.status >= 500:
-                            last_err = f"{resp.status} server error on {current_model}"
+                            last_err = f"429 rate-limit on {current_model} ({active['name']})"
                             logger.warning(last_err)
                         else:
                             body = await resp.text()
@@ -350,19 +404,22 @@ async def _zen_with_tools(
             else:
                 await asyncio.sleep(min(2.0, BACKOFF_BASE ** min(attempt, 1)))
 
-    # Fallback to other configured providers (not hardcoded)
+    # ── 3. Fallback to ALL other working providers ──
     working = db.get_working_providers()
     if working:
         logger.info(f"Falling back to {len(working)} other working providers")
         for fallback_provider in working:
-            if fallback_provider.get("id") == (provider or {}).get("id"):
-                continue  # skip the one we already tried
+            # skip OpenCode DB entry (already tried) and active (already tried)
+            pid = fallback_provider.get("id")
+            active_id = (active or {}).get("id")
+            if pid == active_id:
+                continue
             config = providers.get_provider_config(fallback_provider)
             base_url = config["base_url"]
             api_key = config["api_key"]
             model = config["model"]
             models_list = config["models"] or [model]
-            
+
             for attempt in range(2):
                 current_model = models_list[attempt % len(models_list)]
                 payload = {
@@ -375,14 +432,11 @@ async def _zen_with_tools(
                 headers = {"Content-Type": "application/json"}
                 if api_key:
                     headers["Authorization"] = f"Bearer {api_key}"
-                
+
                 chat_url = base_url.rstrip("/")
                 if not chat_url.endswith("/chat/completions"):
-                    if not chat_url.endswith("/v1"):
-                        chat_url += "/v1/chat/completions"
-                    else:
-                        chat_url += "/chat/completions"
-                
+                    chat_url = chat_url + ("/chat/completions" if chat_url.endswith("/v1") else "/v1/chat/completions")
+
                 try:
                     async with aiohttp.ClientSession() as session:
                         async with session.post(
@@ -391,7 +445,9 @@ async def _zen_with_tools(
                         ) as resp:
                             if resp.status == 200:
                                 data = await resp.json()
-                                return data["choices"][0]["message"]
+                                if "choices" in data and data["choices"]:
+                                    return data["choices"][0]["message"]
+                                last_err = f"empty response from {current_model}"
                             elif resp.status == 429:
                                 last_err = f"429 rate-limit on {current_model} ({fallback_provider['name']})"
                                 logger.warning(last_err)
@@ -407,7 +463,7 @@ async def _zen_with_tools(
                     logger.error(last_err)
                 await asyncio.sleep(2.0)
 
-    logger.error(f"No configured providers available or all failed. Last error: {last_err}")
+    logger.error(f"No providers available or all failed. Last error: {last_err}")
     return None
 
 

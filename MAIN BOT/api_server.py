@@ -51,7 +51,7 @@ JWT_SECRET = os.getenv("JWT_SECRET", "oxycode-miniapp-secret-change-me")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 7 * 24  # 7 days
 
-OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1"
+OPENCODE_ZEN_BASE_URL = "https://opencode.ai/inference/openai/v1"
 OPENCODE_ZEN_MODEL = os.getenv("OPENCODE_ZEN_MODEL", "mimo-v2.5-free")
 OPENCODE_ZEN_FALLBACKS = os.getenv(
     "OPENCODE_ZEN_FALLBACKS",

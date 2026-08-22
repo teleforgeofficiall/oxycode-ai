@@ -41,7 +41,7 @@ AGENT_TEAM = "OXYCODE TEAM"
 
 # OpenCode Zen Configuration (No API Key needed for free models)
 # NOTE: the real Zen API lives under /zen/v1 — NOT /v1 (that's the marketing site, returns 404).
-OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1"
+OPENCODE_ZEN_BASE_URL = "https://opencode.ai/inference/openai/v1"
 OPENCODE_ZEN_MODEL = os.getenv("OPENCODE_ZEN_MODEL", "mimo-v2.5-free")
 # Fallback models tried (in order) if the primary model is rate-limited / unavailable.
 OPENCODE_ZEN_FALLBACKS = os.getenv(

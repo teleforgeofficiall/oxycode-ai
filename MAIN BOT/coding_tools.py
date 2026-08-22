@@ -429,6 +429,7 @@ async def _zen_chat(prompt: str, system: str = None) -> str:
     
     headers = {
         "Content-Type": "application/json",
+        "User-Agent": "opencode/1.18.16",
     }
     
     messages = []

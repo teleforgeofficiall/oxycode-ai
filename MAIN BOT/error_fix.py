@@ -127,7 +127,7 @@ async def analyze_error(
                 try:
                     async with session.post(
                         f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "User-Agent": "opencode/1.18.16"},
                         json=payload,
                         timeout=aiohttp.ClientTimeout(total=90),
                     ) as resp:

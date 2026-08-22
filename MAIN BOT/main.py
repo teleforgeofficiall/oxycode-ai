@@ -310,7 +310,8 @@ async def admin_command(update: Update, context):
         f"  Total Users: {total_users}\n"
         f"  Daily Limit: {daily_limit} msgs/user\n"
         f"  Maintenance: {maint_status}\n"
-        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"  Primary: OpenCode (Free, IP-based)\n"
+        f"  Fallback: {provider_name} ({provider_status})\n\n"
         f"Controls:"
     )
 
@@ -355,7 +356,8 @@ async def toggle_maintenance_callback(update: Update, context):
         f"  Total Users: {total_users}\n"
         f"  Daily Limit: {daily_limit} msgs/user\n"
         f"  Maintenance: {maint_status}\n"
-        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"  Primary: OpenCode (Free, IP-based)\n"
+        f"  Fallback: {provider_name} ({provider_status})\n\n"
         f"Controls:"
     )
 
@@ -401,7 +403,8 @@ async def admin_refresh_callback(update: Update, context):
         f"  Total Users: {total_users}\n"
         f"  Daily Limit: {daily_limit} msgs/user\n"
         f"  Maintenance: {maint_status}\n"
-        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"  Primary: OpenCode (Free, IP-based)\n"
+        f"  Fallback: {provider_name} ({provider_status})\n\n"
         f"Controls:"
     )
 
@@ -482,13 +485,14 @@ async def handle_admin_rate_limit_input(update: Update, context):
     maint_callback = "toggle_maintenance_off" if maintenance else "toggle_maintenance_on"
 
     text_msg = (
-        f"✅ <b>Daily limit updated to {new_limit} msgs/24h</b>\n\n"
-        f"🛡 <b>{AGENT_NAME} Admin Panel</b>\n\n"
-        f"<b>📊 Stats:</b>\n"
-        f"• Total Users: <code>{total_users}</code>\n"
-        f"• Daily Limit: <code>{new_limit}</code> msgs/user\n"
-        f"• Maintenance: {maint_status}\n\n"
-        f"<b>🔧 Controls:</b>"
+        f"✅ Daily limit updated to {new_limit} msgs/24h\n\n"
+        f"{AGENT_NAME} Admin Panel\n\n"
+        f"Stats:\n"
+        f"  Total Users: {total_users}\n"
+        f"  Daily Limit: {new_limit} msgs/user\n"
+        f"  Maintenance: {maint_status}\n"
+        f"  Primary: OpenCode (Free, IP-based)\n\n"
+        f"Controls:"
     )
 
     keyboard = InlineKeyboardMarkup([
@@ -520,7 +524,8 @@ async def _build_admin_panel():
         f"  Total Users: {total_users}\n"
         f"  Daily Limit: {daily_limit} msgs/user\n"
         f"  Maintenance: {maint_status}\n"
-        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"  Primary: OpenCode (Free, IP-based)\n"
+        f"  Fallback: {provider_name} ({provider_status})\n\n"
         f"Controls:"
     )
     keyboard = InlineKeyboardMarkup([
@@ -554,7 +559,7 @@ async def admin_providers_callback(update: Update, context):
             )])
     else:
         text += "  No providers configured yet.\n"
-    keyboard_rows.append([InlineKeyboardButton("+ Add OpenCode", callback_data="provider_add_opencode")])
+    keyboard_rows.append([InlineKeyboardButton("+ Add OpenCode (Free, No API Key)", callback_data="provider_add_opencode")])
     keyboard_rows.append([InlineKeyboardButton("+ Add Gemini", callback_data="provider_add_gemini")])
     keyboard_rows.append([InlineKeyboardButton("+ Add Nara Router", callback_data="provider_add_nararouter")])
     keyboard_rows.append([InlineKeyboardButton("+ Add Custom", callback_data="provider_add_custom")])
@@ -589,9 +594,11 @@ async def provider_detail_callback(update: Update, context):
         return
     status = "✅ Working" if provider.get("is_active") else ("✅ Available" if provider.get("is_working") else "❌ Error")
     active = "⭐ Active" if provider.get("is_active") else "Inactive"
+    auth_type = "IP-based (no key)" if provider["provider_type"] == "opencode" else "API Key"
     text = (
         f"{provider['name']}\n"
         f"Type: {provider['provider_type']}\n"
+        f"Auth: {auth_type}\n"
         f"Status: {status}\n"
         f"Active: {active}\n"
         f"Base URL: {provider.get('base_url', 'default')}\n"
@@ -675,7 +682,33 @@ async def provider_add_callback(update: Update, context):
     defaults = providers.PROVIDER_DEFAULTS.get(provider_type, {})
     display = defaults.get("display_name", provider_type)
 
-    if provider_type in ("opencode", "gemini", "nararouter"):
+    if provider_type == "opencode":
+        # OpenCode = IP-based, no API key needed — add directly
+        await query.edit_message_text(f"Adding OpenCode (IP-based, no API key needed)...\n\nTesting...")
+        is_valid, models, error = await providers.validate_opencode()
+        if is_valid:
+            provider_id = db.add_provider(display, "opencode", api_key="")
+            db.update_provider_status(provider_id, is_working=1, models_json=json.dumps(models))
+            existing = db.get_all_providers()
+            if len(existing) == 1:
+                db.set_provider_active(provider_id)
+            models_preview = ", ".join(models[:5]) if models else "none"
+            if len(models) > 5:
+                models_preview += f" (+{len(models)-5} more)"
+            await query.edit_message_text(
+                f"✅ OpenCode added!\n\n"
+                f"Auth: IP-based (no API key)\n"
+                f"Models: {len(models)}\n"
+                f"Preview: {models_preview}\n"
+                f"Status: Working\n\n"
+                f"OpenCode is now the PRIMARY provider (tried first on every request)."
+            )
+        else:
+            await query.edit_message_text(
+                f"❌ OpenCode validation failed:\n{error}\n\n"
+                f"Provider was NOT added."
+            )
+    elif provider_type in ("gemini", "nararouter"):
         # Skip name - go straight to API key
         auto_name = display
         db.set_user_state(uid, "waiting_for_provider_apikey", data=json.dumps({"type": provider_type, "name": auto_name}))

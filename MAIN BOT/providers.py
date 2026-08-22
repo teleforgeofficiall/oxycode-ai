@@ -15,28 +15,34 @@ import database as db
 logger = logging.getLogger(__name__)
 
 PROVIDER_DEFAULTS = {
-    "opencode": {"base_url": "https://opencode.ai/zen/v1", "display_name": "OpenCode"},
+    "opencode": {"base_url": "https://opencode.ai/inference/openai/v1", "display_name": "OpenCode"},
     "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta", "display_name": "Gemini"},
     "nararouter": {"base_url": "https://router.bynara.id/v1", "display_name": "Nara Router"},
     "custom": {"base_url": "", "display_name": "Custom"},
 }
 
+OPENCODE_FREE_MODELS = [
+    "mimo-v2.5-free", "deepseek-v4-flash-free", "hy3-free",
+    "nemotron-3.5-lightning-free", "nemotron-3-ultra-free",
+    "big-pickle", "laguna-s-2.1-free",
+]
+
 VALIDATION_TIMEOUT = 30
 
 
-async def validate_opencode(api_key, base_url=None):
-    url = (base_url or PROVIDER_DEFAULTS["opencode"]["base_url"]) + "/chat/completions"
+async def validate_opencode(api_key=None, base_url=None):
+    """Validate OpenCode — IP-based auth, no API key needed."""
+    base = (base_url or PROVIDER_DEFAULTS["opencode"]["base_url"]).rstrip("/")
+    url = base + "/chat/completions"
     payload = {"model": "mimo-v2.5-free", "messages": [{"role": "user", "content": "Say ok"}], "max_tokens": 10, "stream": False}
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    headers = {"Content-Type": "application/json", "User-Agent": "opencode/1.18.16"}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=VALIDATION_TIMEOUT)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     if "choices" in data and len(data["choices"]) > 0:
-                        models = await _fetch_models_list(base_url or PROVIDER_DEFAULTS["opencode"]["base_url"], api_key)
+                        models = await _fetch_opencode_free_models(base)
                         return True, models, ""
                     return False, [], "Invalid response format"
                 else:
@@ -46,6 +52,26 @@ async def validate_opencode(api_key, base_url=None):
         return False, [], "Connection timeout"
     except Exception as e:
         return False, [], f"Error: {str(e)[:200]}"
+
+
+async def _fetch_opencode_free_models(base_url=None):
+    """Fetch free models from OpenCode API."""
+    base = (base_url or PROVIDER_DEFAULTS["opencode"]["base_url"]).rstrip("/")
+    url = base + "/models"
+    headers = {"User-Agent": "opencode/1.18.16"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    all_models = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
+                    free_models = [m for m in all_models if m in OPENCODE_FREE_MODELS or "free" in m.lower()]
+                    if not free_models:
+                        free_models = OPENCODE_FREE_MODELS
+                    return free_models
+    except Exception as e:
+        logger.error(f"Failed to fetch OpenCode models: {e}")
+    return OPENCODE_FREE_MODELS
 
 
 GEMINI_FREE_MODELS = [
@@ -195,7 +221,7 @@ async def _fetch_nararouter_free_models(api_key=None):
     return ["qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5", "ox-alpha", "stepfun-3.7-flash"]
 
 
-async def validate_provider(provider_type, api_key, base_url=None):
+async def validate_provider(provider_type, api_key=None, base_url=None):
     if provider_type == "opencode":
         return await validate_opencode(api_key, base_url)
     elif provider_type == "gemini":
@@ -252,17 +278,28 @@ def _select_best_model(provider_type, models):
         if provider_type == "opencode":
             return "mimo-v2.5-free"
         elif provider_type == "gemini":
-            return "gemini-2.0-flash"
+            return "gemini-2.5-flash"
         elif provider_type == "nararouter":
-            return "deepseek-v4-flash"
+            return "qwen-3.8-max-free"
         return ""
     preferred = {
-        "opencode": ["mimo-v2.5-free", "deepseek-v4-flash", "hy3-free"],
-        "gemini": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"],
-        "nararouter": ["deepseek-v4-flash", "qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5"],
+        "opencode": ["mimo-v2.5-free", "deepseek-v4-flash-free", "hy3-free", "big-pickle"],
+        "gemini": ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-lite"],
+        "nararouter": ["qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5", "ox-alpha"],
     }
     for pref in preferred.get(provider_type, []):
         for m in models:
             if pref.lower() in m.lower():
                 return m
     return models[0]
+
+
+def get_opencode_config():
+    """Return OpenCode IP-based config (no API key needed)."""
+    return {
+        "base_url": PROVIDER_DEFAULTS["opencode"]["base_url"],
+        "api_key": "",
+        "model": "mimo-v2.5-free",
+        "models": OPENCODE_FREE_MODELS,
+        "provider_type": "opencode",
+    }
