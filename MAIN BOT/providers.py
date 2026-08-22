@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 PROVIDER_DEFAULTS = {
     "opencode": {"base_url": "https://opencode.ai/zen/v1", "display_name": "OpenCode"},
     "gemini": {"base_url": "https://generativelanguage.googleapis.com/v1beta", "display_name": "Gemini"},
+    "nararouter": {"base_url": "https://router.bynara.id/v1", "display_name": "Nara Router"},
     "custom": {"base_url": "", "display_name": "Custom"},
 }
 
@@ -122,11 +123,68 @@ async def _fetch_models_list(base_url, api_key=None):
     return []
 
 
+async def validate_nararouter(api_key, base_url=None):
+    base = (base_url or PROVIDER_DEFAULTS["nararouter"]["base_url"]).rstrip("/")
+    chat_url = base + "/chat/completions" if base.endswith("/v1") else base + "/v1/chat/completions"
+    payload = {"model": "deepseek-v4-flash", "messages": [{"role": "user", "content": "Say ok"}], "max_tokens": 10, "stream": False}
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(chat_url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=VALIDATION_TIMEOUT)) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if "choices" in data and len(data["choices"]) > 0:
+                        models = await _fetch_nararouter_free_models(api_key)
+                        return True, models, ""
+                    return False, [], "Invalid response format"
+                else:
+                    body = await resp.text()
+                    return False, [], f"HTTP {resp.status}: {body[:200]}"
+    except asyncio.TimeoutError:
+        return False, [], "Connection timeout"
+    except Exception as e:
+        return False, [], f"Error: {str(e)[:200]}"
+
+
+async def _fetch_nararouter_free_models(api_key=None):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://router.bynara.id/api/plans",
+                timeout=aiohttp.ClientTimeout(total=10)
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    plans = data if isinstance(data, list) else data.get("plans", data.get("data", []))
+                    free_models = []
+                    if isinstance(plans, list):
+                        for plan in plans:
+                            plan_name = str(plan.get("name", plan.get("plan", ""))).lower()
+                            if "free" in plan_name:
+                                models = plan.get("models", plan.get("available_models", []))
+                                if isinstance(models, list):
+                                    for m in models:
+                                        if isinstance(m, str):
+                                            free_models.append(m)
+                                        elif isinstance(m, dict):
+                                            free_models.append(m.get("id", m.get("name", "")))
+                    if not free_models:
+                        free_models = ["deepseek-v4-flash", "qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5"]
+                    return free_models
+    except Exception as e:
+        logger.error(f"Failed to fetch Nara Router models: {e}")
+    return ["deepseek-v4-flash", "qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5"]
+
+
 async def validate_provider(provider_type, api_key, base_url=None):
     if provider_type == "opencode":
         return await validate_opencode(api_key, base_url)
     elif provider_type == "gemini":
         return await validate_gemini(api_key, base_url)
+    elif provider_type == "nararouter":
+        return await validate_nararouter(api_key, base_url)
     elif provider_type == "custom":
         return await validate_custom(api_key, base_url)
     else:
@@ -178,10 +236,13 @@ def _select_best_model(provider_type, models):
             return "mimo-v2.5-free"
         elif provider_type == "gemini":
             return "gemini-2.0-flash"
+        elif provider_type == "nararouter":
+            return "deepseek-v4-flash"
         return ""
     preferred = {
         "opencode": ["mimo-v2.5-free", "deepseek-v4-flash", "hy3-free"],
         "gemini": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"],
+        "nararouter": ["deepseek-v4-flash", "qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5"],
     }
     for pref in preferred.get(provider_type, []):
         for m in models:

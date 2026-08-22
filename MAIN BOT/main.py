@@ -545,17 +545,18 @@ async def admin_providers_callback(update: Update, context):
     keyboard_rows = []
     if providers_list:
         for p in providers_list:
-            status = "Working" if p.get("is_working") else "Error"
-            active = " [ACTIVE]" if p.get("is_active") else ""
-            text += f"  {p['name']} ({p['provider_type']}) - {status}{active}\n"
+            status_icon = "✅" if p.get("is_working") else "❌"
+            active_icon = " ⭐" if p.get("is_active") else ""
+            text += f"  {status_icon} {p['name']}{active_icon}\n"
             keyboard_rows.append([InlineKeyboardButton(
-                f"{'* ' if p.get('is_active') else ''}{p['name']} ({status})",
+                f"{status_icon} {p['name']}{active_icon}",
                 callback_data=f"provider_detail_{p['id']}"
             )])
     else:
         text += "  No providers configured yet.\n"
     keyboard_rows.append([InlineKeyboardButton("+ Add OpenCode", callback_data="provider_add_opencode")])
     keyboard_rows.append([InlineKeyboardButton("+ Add Gemini", callback_data="provider_add_gemini")])
+    keyboard_rows.append([InlineKeyboardButton("+ Add Nara Router", callback_data="provider_add_nararouter")])
     keyboard_rows.append([InlineKeyboardButton("+ Add Custom", callback_data="provider_add_custom")])
     keyboard_rows.append([InlineKeyboardButton("Back", callback_data="admin_back")])
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard_rows))
@@ -586,10 +587,10 @@ async def provider_detail_callback(update: Update, context):
     if not provider:
         await query.answer("Provider not found!", show_alert=True)
         return
-    status = "Working" if provider.get("is_working") else "Not Working"
-    active = "Yes" if provider.get("is_active") else "No"
+    status = "✅ Working" if provider.get("is_active") else ("✅ Available" if provider.get("is_working") else "❌ Error")
+    active = "⭐ Active" if provider.get("is_active") else "Inactive"
     text = (
-        f"Provider: {provider['name']}\n"
+        f"{provider['name']}\n"
         f"Type: {provider['provider_type']}\n"
         f"Status: {status}\n"
         f"Active: {active}\n"
@@ -599,7 +600,7 @@ async def provider_detail_callback(update: Update, context):
         text += f"Error: {provider['error_message']}\n"
     keyboard_rows = []
     if not provider.get("is_active"):
-        keyboard_rows.append([InlineKeyboardButton("Set Active", callback_data=f"provider_activate_{provider_id}")])
+        keyboard_rows.append([InlineKeyboardButton("⭐ Set Active", callback_data=f"provider_activate_{provider_id}")])
     keyboard_rows.append([InlineKeyboardButton("Test Provider", callback_data=f"provider_test_{provider_id}")])
     keyboard_rows.append([InlineKeyboardButton("Delete", callback_data=f"provider_delete_{provider_id}")])
     keyboard_rows.append([InlineKeyboardButton("Back", callback_data="admin_providers")])
@@ -663,7 +664,7 @@ async def provider_delete_callback(update: Update, context):
 
 
 async def provider_add_callback(update: Update, context):
-    """Start add provider flow."""
+    """Start add provider flow - skip name for built-in providers."""
     query = update.callback_query
     uid = query.from_user.id
     if not is_admin(uid):
@@ -673,15 +674,27 @@ async def provider_add_callback(update: Update, context):
     provider_type = query.data.replace("provider_add_", "")
     defaults = providers.PROVIDER_DEFAULTS.get(provider_type, {})
     display = defaults.get("display_name", provider_type)
-    db.set_user_state(uid, f"waiting_for_provider_name", data=provider_type)
-    await query.edit_message_text(
-        f"Adding {display} Provider\n\n"
-        f"Send a name for this provider (e.g. 'My {display}'):"
-    )
+
+    if provider_type in ("opencode", "gemini", "nararouter"):
+        # Skip name - go straight to API key
+        auto_name = display
+        db.set_user_state(uid, "waiting_for_provider_apikey", data=json.dumps({"type": provider_type, "name": auto_name}))
+        await query.edit_message_text(
+            f"Adding {display}\n\n"
+            f"Send the API key:\n\n"
+            f"Send /cancel to abort."
+        )
+    else:
+        # Custom - ask for name first
+        db.set_user_state(uid, "waiting_for_provider_name", data=provider_type)
+        await query.edit_message_text(
+            f"Adding Custom Provider\n\n"
+            f"Send a name for this provider:"
+        )
 
 
 async def handle_provider_name_input(update: Update, context):
-    """Handle provider name input."""
+    """Handle provider name input (custom providers only)."""
     uid = update.effective_user.id
     user_state = db.get_user_state(uid)
     if not user_state or user_state.get("state") != "waiting_for_provider_name":
@@ -690,15 +703,10 @@ async def handle_provider_name_input(update: Update, context):
         return False
     name = update.message.text.strip()
     provider_type = user_state.get("data", "custom")
-    defaults = providers.PROVIDER_DEFAULTS.get(provider_type, {})
-    # Store in state data
     db.set_user_state(uid, "waiting_for_provider_apikey", data=json.dumps({"type": provider_type, "name": name}))
-    base_url_info = ""
-    if provider_type == "custom":
-        base_url_info = "\nYou will also need to provide a Base URL after the API key."
     await update.message.reply_text(
-        f"Send the API key for {name}:{base_url_info}\n\n"
-        f"Or send /cancel to abort."
+        f"Send the API key for {name}:\n\n"
+        f"Send /cancel to abort."
     )
     return True
 
@@ -715,23 +723,30 @@ async def handle_provider_apikey_input(update: Update, context):
     state_data = json.loads(user_state.get("data", "{}"))
     provider_type = state_data.get("type", "custom")
     name = state_data.get("name", "Custom Provider")
+
     if provider_type == "custom":
-        db.set_user_state(uid, "waiting_for_provider_baseurl", data=json.dumps({"type": provider_type, "name": name, "api_key": api_key}))
-        await update.message.reply_text("Send the Base URL for this provider:\n(e.g. https://api.example.com/v1)\n\nOr send /cancel to abort.")
+        # Custom needs base URL next
+        db.set_user_state(uid, "waiting_for_provider_baseurl", data=json.dumps({
+            "type": provider_type, "name": name, "api_key": api_key
+        }))
+        await update.message.reply_text("Send the Base URL:\n(e.g. https://api.example.com/v1)\n\nSend /cancel to abort.")
     else:
-        # For opencode/gemini, validate immediately
+        # Built-in (opencode/gemini/nararouter) - validate immediately
         await update.message.reply_text("Testing API key...")
         is_valid, models, error = await providers.validate_provider(provider_type, api_key)
         if is_valid:
             provider_id = db.add_provider(name, provider_type, api_key=api_key)
             db.update_provider_status(provider_id, is_working=1, models_json=json.dumps(models))
-            # Auto-activate if first provider
             existing = db.get_all_providers()
             if len(existing) == 1:
                 db.set_provider_active(provider_id)
+            models_preview = ", ".join(models[:5]) if models else "none"
+            if len(models) > 5:
+                models_preview += f" (+{len(models)-5} more)"
             await update.message.reply_text(
-                f"Provider {name} added successfully!\n"
+                f"Provider \"{name}\" added!\n\n"
                 f"Models found: {len(models)}\n"
+                f"Preview: {models_preview}\n\n"
                 f"Status: Working"
             )
         else:
@@ -756,18 +771,58 @@ async def handle_provider_baseurl_input(update: Update, context):
     provider_type = state_data.get("type", "custom")
     name = state_data.get("name", "Custom Provider")
     api_key = state_data.get("api_key", "")
+
+    # Ask for model IDs
+    db.set_user_state(uid, "waiting_for_provider_model_ids", data=json.dumps({
+        "type": provider_type, "name": name, "api_key": api_key, "base_url": base_url
+    }))
+    await update.message.reply_text(
+        "Send model ID(s) for this provider:\n\n"
+        "Single: gpt-4\n"
+        "Multiple: gpt-4, gpt-3.5-turbo, claude-3\n\n"
+        "Send /skip to auto-detect from API."
+    )
+    return True
+
+
+async def handle_provider_model_ids_input(update: Update, context):
+    """Handle model ID input for custom provider."""
+    uid = update.effective_user.id
+    user_state = db.get_user_state(uid)
+    if not user_state or user_state.get("state") != "waiting_for_provider_model_ids":
+        return False
+    if not is_admin(uid):
+        return False
+
+    state_data = json.loads(user_state.get("data", "{}"))
+    provider_type = state_data.get("type", "custom")
+    name = state_data.get("name", "Custom Provider")
+    api_key = state_data.get("api_key", "")
+    base_url = state_data.get("base_url", "")
+
+    text = update.message.text.strip()
+    if text == "/skip":
+        models = []
+    else:
+        models = [m.strip() for m in text.split(",") if m.strip()]
+
     # Validate
     await update.message.reply_text("Testing provider...")
-    is_valid, models, error = await providers.validate_provider(provider_type, api_key, base_url)
+    is_valid, detected_models, error = await providers.validate_provider(provider_type, api_key, base_url)
     if is_valid:
+        final_models = models if models else detected_models
         provider_id = db.add_provider(name, provider_type, api_key=api_key, base_url=base_url)
-        db.update_provider_status(provider_id, is_working=1, models_json=json.dumps(models))
+        db.update_provider_status(provider_id, is_working=1, models_json=json.dumps(final_models))
         existing = db.get_all_providers()
         if len(existing) == 1:
             db.set_provider_active(provider_id)
+        models_preview = ", ".join(final_models[:5]) if final_models else "none"
+        if len(final_models) > 5:
+            models_preview += f" (+{len(final_models)-5} more)"
         await update.message.reply_text(
-            f"Provider {name} added successfully!\n"
-            f"Models found: {len(models)}\n"
+            f"Provider \"{name}\" added!\n\n"
+            f"Models: {len(final_models)}\n"
+            f"Preview: {models_preview}\n\n"
             f"Status: Working"
         )
     else:
@@ -792,18 +847,20 @@ async def handle_text(update: Update, context):
     """Handle plain text - route to appropriate handler based on state."""
     uid = update.effective_user.id
 
-    # Check provider input states first
+    # Check state-based routing first
     user_state = db.get_user_state(uid)
     if user_state:
         state = user_state.get("state", "")
         if state == "waiting_for_rate_limit":
-            return  # handled by handle_admin_rate_limit_input
+            return await handle_admin_rate_limit_input(update, context)
         elif state == "waiting_for_provider_name":
             return await handle_provider_name_input(update, context)
         elif state == "waiting_for_provider_apikey":
             return await handle_provider_apikey_input(update, context)
         elif state == "waiting_for_provider_baseurl":
             return await handle_provider_baseurl_input(update, context)
+        elif state == "waiting_for_provider_model_ids":
+            return await handle_provider_model_ids_input(update, context)
 
     # Non-admin blocked
     if not is_admin(uid):
@@ -855,33 +912,9 @@ def main():
     app.add_handler(CallbackQueryHandler(provider_activate_callback, pattern=r"^provider_activate_\d+$"))
     app.add_handler(CallbackQueryHandler(provider_test_callback, pattern=r"^provider_test_\d+$"))
     app.add_handler(CallbackQueryHandler(provider_delete_callback, pattern=r"^provider_delete_\d+$"))
-    app.add_handler(CallbackQueryHandler(provider_add_callback, pattern="^provider_add_(opencode|gemini|custom)$"))
+    app.add_handler(CallbackQueryHandler(provider_add_callback, pattern="^provider_add_(opencode|gemini|nararouter|custom)$"))
 
-    # Admin rate limit input handler (must be before fallback)
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_admin_rate_limit_input,
-        block=False,
-    ))
-
-    # Provider input handlers (must be before fallback)
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_provider_name_input,
-        block=False,
-    ))
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_provider_apikey_input,
-        block=False,
-    ))
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        handle_provider_baseurl_input,
-        block=False,
-    ))
-
-    # Fallback text handler
+    # Single text handler - routes based on user state
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     logger.info(f"🤖 {AGENT_NAME} bot started (Mini App gateway + admin panel mode)")
