@@ -6,6 +6,19 @@ import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
+const AVATAR_COLORS = [
+  'bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
+  'bg-rose-500', 'bg-cyan-500', 'bg-fuchsia-500', 'bg-teal-500',
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
@@ -87,6 +100,34 @@ export default function SettingsPage() {
       </div>
 
       <div className="p-4 space-y-4 max-w-lg mx-auto">
+        {/* Telegram Profile Card — TOP */}
+        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-6">
+          <div className="flex flex-col items-center gap-4">
+            {user?.photo_url ? (
+              <img
+                src={user.photo_url}
+                alt={user.first_name}
+                className="size-24 rounded-full object-cover ring-2 ring-kumo-line"
+              />
+            ) : (
+              <div
+                className={`size-24 rounded-full flex items-center justify-center text-4xl font-bold text-white ${getAvatarColor(user?.first_name || 'U')}`}
+              >
+                {(user?.first_name || 'U').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-kumo-default">
+                {user?.first_name || 'User'}
+                {user?.last_name ? ` ${user.last_name}` : ''}
+              </h2>
+              <p className="text-sm text-kumo-subtle mt-1">
+                @{user?.username || 'unknown'} • ID: {user?.id}
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* Cloudflare Account Section */}
         <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
           <div className="flex items-center gap-3 mb-3">
@@ -161,15 +202,15 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="font-semibold text-kumo-default">AI Provider</h2>
-              <p className="text-xs text-kumo-subtle">Powered by OpenCode Zen</p>
+              <p className="text-xs text-kumo-subtle">Powered by OXYCODE</p>
             </div>
           </div>
           <div className="rounded-lg bg-bg-3 dark:bg-kumo-elevated p-3">
             <p className="text-sm text-kumo-subtle">
-              Free models (no API key required)
+              Paid models — free for OXYCODE users
             </p>
             <p className="text-xs text-kumo-subtle mt-1">
-              mimo-v2.5-free → deepseek-v4-flash-free → hy3-free
+              Claude Opus & Fable 5 • GPT 5 Luna & Sol • More top models ⚡️
             </p>
           </div>
         </section>
@@ -190,17 +231,29 @@ export default function SettingsPage() {
             <Skeleton className="h-10 w-full" />
           ) : (
             <div className="space-y-2">
+              {limitsData?.remaining === 0 && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-3">
+                  <p className="text-sm text-red-500 font-medium">
+                    Daily rate limit reached
+                  </p>
+                  <p className="text-xs text-red-500/70 mt-1">
+                    Resets at {limitsData?.resetAt ? new Date(limitsData.resetAt).toLocaleTimeString() : 'later'}
+                  </p>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-kumo-subtle">Used today</span>
                 <span className="font-medium text-kumo-default">
-                  {limitsData?.usedToday || 0} / {limitsData?.dailyLimit || 20}
+                  {limitsData?.used || 0} / {limitsData?.limit || 20}
                 </span>
               </div>
               <div className="w-full bg-bg-3 dark:bg-kumo-elevated rounded-full h-2">
                 <div
-                  className="bg-blue-500 h-2 rounded-full transition-all"
+                  className={`h-2 rounded-full transition-all ${
+                    limitsData?.remaining === 0 ? 'bg-red-500' : 'bg-blue-500'
+                  }`}
                   style={{
-                    width: `${Math.min(100, ((limitsData?.usedToday || 0) / (limitsData?.dailyLimit || 20)) * 100)}%`,
+                    width: `${Math.min(100, ((limitsData?.used || 0) / (limitsData?.limit || 20)) * 100)}%`,
                   }}
                 />
               </div>
@@ -209,23 +262,6 @@ export default function SettingsPage() {
               </p>
             </div>
           )}
-        </section>
-
-        {/* Telegram Account Section */}
-        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
-          <div className="flex items-center gap-3">
-            <div className="size-10 rounded-lg bg-blue-400/10 flex items-center justify-center">
-              <User className="size-5 text-blue-400" />
-            </div>
-            <div>
-              <h2 className="font-semibold text-kumo-default">
-                {user?.first_name || 'User'}
-              </h2>
-              <p className="text-xs text-kumo-subtle">
-                @{user?.username || 'unknown'} • ID: {user?.id}
-              </p>
-            </div>
-          </div>
         </section>
       </div>
     </div>
