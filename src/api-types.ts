@@ -151,6 +151,20 @@ export interface FileType {
   language?: string;
 }
 
+// Agent behavior helpers
+export const MAX_AGENT_QUERY_LENGTH = 10000;
+
+export function isAgenticLikeBehavior(behavior: BehaviorType): boolean {
+  return behavior === 'agentic' || behavior === 'think';
+}
+
+export function getBehaviorTypeForProject(projectType?: ProjectType): BehaviorType {
+  if (projectType === 'telegram-bot') return 'think';
+  return 'agentic';
+}
+
+export const DEFAULT_FEATURE_DEFINITIONS: FeatureDefinition[] = [];
+
 // Image attachment constants
 export const SUPPORTED_IMAGE_TYPES = SUPPORTED_IMAGE_MIME_TYPES;
 
