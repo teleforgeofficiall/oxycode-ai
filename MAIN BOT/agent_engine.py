@@ -56,25 +56,15 @@ from typing import Dict, Any, List, Optional
 
 import aiohttp
 
-from config import (
-    OPENCODE_ZEN_BASE_URL,
-    OPENCODE_ZEN_MODEL,
-    OPENCODE_ZEN_FALLBACKS,
-)
+import database as db
 import coding_tools as ct
 import providers
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration - Dynamic provider system with fallback
+# Configuration
 # ---------------------------------------------------------------------------
-# Default models for fallback when no provider is configured
-DEFAULT_MODELS = [OPENCODE_ZEN_MODEL]
-if isinstance(OPENCODE_ZEN_FALLBACKS, str):
-    DEFAULT_MODELS += [m.strip() for m in OPENCODE_ZEN_FALLBACKS.split(",") if m.strip()]
-elif isinstance(OPENCODE_ZEN_FALLBACKS, (list, tuple)):
-    DEFAULT_MODELS += [str(m).strip() for m in OPENCODE_ZEN_FALLBACKS if str(m).strip()]
 
 MAX_TURNS = 8
 HTTP_TIMEOUT = 90
@@ -360,51 +350,64 @@ async def _zen_with_tools(
             else:
                 await asyncio.sleep(min(2.0, BACKOFF_BASE ** min(attempt, 1)))
 
-    # Fallback to default OpenCode Zen models
-    logger.info("Falling back to default OpenCode Zen models")
-    for attempt in range(MAX_ATTEMPTS_PER_TURN * len(DEFAULT_MODELS)):
-        model = DEFAULT_MODELS[attempt % len(DEFAULT_MODELS)]
-        payload = {
-            "model": model,
-            "messages": full,
-            "tools": tools,
-            "tool_choice": "auto",
-            "stream": False,
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
-                    headers={"Content-Type": "application/json"},
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT),
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data["choices"][0]["message"]
-                    elif resp.status == 429:
-                        last_err = f"429 rate-limit on {model}"
-                        logger.warning(last_err)
-                    elif resp.status >= 500:
-                        last_err = f"{resp.status} server error on {model}"
-                        logger.warning(last_err)
+    # Fallback to other configured providers (not hardcoded)
+    working = db.get_working_providers()
+    if working:
+        logger.info(f"Falling back to {len(working)} other working providers")
+        for fallback_provider in working:
+            if fallback_provider.get("id") == (provider or {}).get("id"):
+                continue  # skip the one we already tried
+            config = providers.get_provider_config(fallback_provider)
+            base_url = config["base_url"]
+            api_key = config["api_key"]
+            model = config["model"]
+            models_list = config["models"] or [model]
+            
+            for attempt in range(2):
+                current_model = models_list[attempt % len(models_list)]
+                payload = {
+                    "model": current_model,
+                    "messages": full,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                    "stream": False,
+                }
+                headers = {"Content-Type": "application/json"}
+                if api_key:
+                    headers["Authorization"] = f"Bearer {api_key}"
+                
+                chat_url = base_url.rstrip("/")
+                if not chat_url.endswith("/chat/completions"):
+                    if not chat_url.endswith("/v1"):
+                        chat_url += "/v1/chat/completions"
                     else:
-                        body = await resp.text()
-                        last_err = f"{resp.status} {body[:120]}"
-                        logger.error(f"Zen API error: {last_err}")
-        except asyncio.TimeoutError:
-            last_err = f"timeout on {model} after {HTTP_TIMEOUT}s"
-            logger.warning(last_err)
-        except Exception as e:
-            last_err = f"exception on {model}: {e}"
-            logger.error(last_err)
+                        chat_url += "/chat/completions"
+                
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(
+                            chat_url, headers=headers, json=payload,
+                            timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT),
+                        ) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                return data["choices"][0]["message"]
+                            elif resp.status == 429:
+                                last_err = f"429 rate-limit on {current_model} ({fallback_provider['name']})"
+                                logger.warning(last_err)
+                            else:
+                                body = await resp.text()
+                                last_err = f"{resp.status} {body[:120]}"
+                                logger.error(f"Fallback provider error: {last_err}")
+                except asyncio.TimeoutError:
+                    last_err = f"timeout on {current_model}"
+                    logger.warning(last_err)
+                except Exception as e:
+                    last_err = f"exception on {current_model}: {e}"
+                    logger.error(last_err)
+                await asyncio.sleep(2.0)
 
-        if "429" in last_err:
-            await asyncio.sleep(min(8.0, BACKOFF_BASE ** min(attempt, 3)))
-        else:
-            await asyncio.sleep(min(2.0, BACKOFF_BASE ** min(attempt, 1)))
-
-    logger.error(f"All providers and models exhausted. Last error: {last_err}")
+    logger.error(f"No configured providers available or all failed. Last error: {last_err}")
     return None
 
 

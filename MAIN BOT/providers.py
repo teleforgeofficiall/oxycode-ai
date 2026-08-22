@@ -48,6 +48,14 @@ async def validate_opencode(api_key, base_url=None):
         return False, [], f"Error: {str(e)[:200]}"
 
 
+GEMINI_FREE_MODELS = [
+    "gemini-2.5-flash", "gemini-2.5-flash-preview", "gemini-2.5-flash-lite",
+    "gemini-1.5-flash", "gemini-2.0-flash-lite", "gemini-2.0-flash",
+    "gemini-1.5-pro", "gemma-2-9b-it", "gemma-2-27b-it",
+    "gemma-4-26b-a4b-it", "gemma-4-31b-it",
+]
+
+
 async def validate_gemini(api_key, base_url=None):
     url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
     try:
@@ -55,16 +63,23 @@ async def validate_gemini(api_key, base_url=None):
             async with session.get(url, timeout=aiohttp.ClientTimeout(total=VALIDATION_TIMEOUT)) as resp:
                 if resp.status == 200:
                     data = await resp.json()
-                    models = []
+                    all_models = []
                     for m in data.get("models", []):
                         name = m.get("name", "")
                         if name.startswith("models/"):
                             name = name[7:]
                         if name:
-                            models.append(name)
-                    return True, models, ""
+                            all_models.append(name)
+                    # Filter to free models only
+                    free_models = [m for m in all_models if m in GEMINI_FREE_MODELS]
+                    if not free_models:
+                        free_models = [m for m in all_models if "flash" in m.lower() and "preview" not in m.lower()]
+                    if not free_models:
+                        free_models = ["gemini-2.5-flash"]
+                    return True, free_models, ""
                 else:
                     body = await resp.text()
+                    return False, [], f"HTTP {resp.status}: {body[:200]}"
                     return False, [], f"HTTP {resp.status}: {body[:200]}"
     except asyncio.TimeoutError:
         return False, [], "Connection timeout"
@@ -126,7 +141,8 @@ async def _fetch_models_list(base_url, api_key=None):
 async def validate_nararouter(api_key, base_url=None):
     base = (base_url or PROVIDER_DEFAULTS["nararouter"]["base_url"]).rstrip("/")
     chat_url = base + "/chat/completions" if base.endswith("/v1") else base + "/v1/chat/completions"
-    payload = {"model": "deepseek-v4-flash", "messages": [{"role": "user", "content": "Say ok"}], "max_tokens": 10, "stream": False}
+    # Use a confirmed FREE model for test
+    payload = {"model": "qwen-3.8-max-free", "messages": [{"role": "user", "content": "Say ok"}], "max_tokens": 10, "stream": False}
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
@@ -161,8 +177,9 @@ async def _fetch_nararouter_free_models(api_key=None):
                     free_models = []
                     if isinstance(plans, list):
                         for plan in plans:
-                            plan_name = str(plan.get("name", plan.get("plan", ""))).lower()
-                            if "free" in plan_name:
+                            plan_code = str(plan.get("code", plan.get("name", ""))).lower()
+                            plan_name = str(plan.get("name", "")).lower()
+                            if "free" in plan_code and "freemium" not in plan_code:
                                 models = plan.get("models", plan.get("available_models", []))
                                 if isinstance(models, list):
                                     for m in models:
@@ -171,11 +188,11 @@ async def _fetch_nararouter_free_models(api_key=None):
                                         elif isinstance(m, dict):
                                             free_models.append(m.get("id", m.get("name", "")))
                     if not free_models:
-                        free_models = ["deepseek-v4-flash", "qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5"]
+                        free_models = ["qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5", "ox-alpha", "stepfun-3.7-flash"]
                     return free_models
     except Exception as e:
         logger.error(f"Failed to fetch Nara Router models: {e}")
-    return ["deepseek-v4-flash", "qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5"]
+    return ["qwen-3.8-max-free", "agnes-2.5-flash", "mistral-medium-3-5", "ox-alpha", "stepfun-3.7-flash"]
 
 
 async def validate_provider(provider_type, api_key, base_url=None):
