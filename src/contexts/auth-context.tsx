@@ -100,8 +100,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Already authenticated with same user
+      // Already authenticated with same user — still call backend for maintenance/isAdmin
       if (token && user?.id === tgUser.id) {
+        try {
+          const result = await authenticateWithBackend(initData);
+          setIsMaintenance(result.maintenance);
+          setIsAdmin(result.isAdmin);
+        } catch {
+          // Ignore errors — use cached auth state
+        }
         setIsLoading(false);
         return;
       }
