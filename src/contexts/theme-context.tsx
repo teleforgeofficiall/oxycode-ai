@@ -59,7 +59,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 		const initial =
 			savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'system'
 				? savedTheme
-				: 'system';
+				: 'dark';
 		// Apply before first paint so dark mode tokens (e.g. bg-bg-4) don't FOUC white
 		applyResolvedTheme(resolveTheme(initial, getSystemTheme()));
 		return initial;

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router';
 
 import App from './App';
 import Home from './routes/home';
+import Chat from './routes/chat/chat';
 import Settings from './routes/settings/index';
 import { ProtectedRoute } from './routes/protected-route';
 
@@ -16,6 +17,14 @@ const routes = [
         Component: Home,
       },
       {
+        path: 'chat/:sessionId',
+        element: (
+          <ProtectedRoute>
+            <Chat />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: 'profile',
         element: (
           <ProtectedRoute>
@@ -26,6 +35,10 @@ const routes = [
       {
         path: 'settings',
         element: <Navigate to="/profile" replace />,
+      },
+      {
+        path: '*',
+        element: <Navigate to="/" replace />,
       },
     ],
   },
