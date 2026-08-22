@@ -438,10 +438,28 @@ def init_db():
             conn = get_db()
             cursor = conn.cursor()
 
+    # Providers table (AI provider configurations)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS providers (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            provider_type TEXT NOT NULL,
+            api_key TEXT,
+            base_url TEXT,
+            is_active INTEGER DEFAULT 0,
+            is_working INTEGER DEFAULT 0,
+            last_checked TIMESTAMP,
+            models_json TEXT DEFAULT '[]',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # Default settings
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('daily_limit', '20'))
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('referral_bonus', '20'))
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('maintenance_mode', 'false'))
+    cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('active_provider_id', ''))
 
     conn.commit()
     conn.close()
@@ -1448,5 +1466,111 @@ def get_all_user_deploys() -> list:
         ORDER BY (SELECT COUNT(*) FROM deployments WHERE user_id=u.user_id) DESC
     ''')
     rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+# ==================== PROVIDER OPERATIONS ====================
+
+def add_provider(name, provider_type, api_key=None, base_url=None):
+    """Add a new AI provider. Returns provider id."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO providers (name, provider_type, api_key, base_url)
+        VALUES (%s, %s, %s, %s)
+        RETURNING id
+    ''', (name, provider_type, api_key, base_url))
+    provider_id = cursor.fetchone()[0]
+    conn.commit()
+    conn.close()
+    return provider_id
+
+
+def get_provider(provider_id):
+    """Get a provider by ID."""
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute('SELECT * FROM providers WHERE id = %s', (provider_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_providers():
+    """Get all providers."""
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute('SELECT * FROM providers ORDER BY id')
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_active_provider():
+    """Get the currently active provider. Returns None if none active."""
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute('SELECT * FROM providers WHERE is_active = 1')
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_provider_active(provider_id):
+    """Set a provider as active (deactivates all others)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE providers SET is_active = 0')
+    cursor.execute('UPDATE providers SET is_active = 1 WHERE id = %s', (provider_id,))
+    cursor.execute("UPDATE settings SET value = %s WHERE key = 'active_provider_id'", (str(provider_id),))
+    conn.commit()
+    conn.close()
+
+
+def update_provider_status(provider_id, is_working, models_json=None, error_message=None):
+    """Update provider working status and last checked time."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE providers 
+        SET is_working = %s, last_checked = CURRENT_TIMESTAMP, 
+            models_json = COALESCE(%s, models_json),
+            error_message = %s
+        WHERE id = %s
+    ''', (is_working, models_json, error_message, provider_id))
+    conn.commit()
+    conn.close()
+
+
+def update_provider(provider_id, name=None, api_key=None, base_url=None):
+    """Update provider fields."""
+    conn = get_db()
+    cursor = conn.cursor()
+    if name is not None:
+        cursor.execute('UPDATE providers SET name = %s WHERE id = %s', (name, provider_id))
+    if api_key is not None:
+        cursor.execute('UPDATE providers SET api_key = %s WHERE id = %s', (api_key, provider_id))
+    if base_url is not None:
+        cursor.execute('UPDATE providers SET base_url = %s WHERE id = %s', (base_url, provider_id))
+    conn.commit()
+    conn.close()
+
+
+def delete_provider(provider_id):
+    """Delete a provider."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM providers WHERE id = %s', (provider_id,))
+    conn.commit()
+    conn.close()
+
+
+def get_working_providers():
+    """Get all providers that are marked as working."""
+    conn = get_db()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute('SELECT * FROM providers WHERE is_working = 1 ORDER BY id')
+    rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]

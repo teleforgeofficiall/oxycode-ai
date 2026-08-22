@@ -62,21 +62,24 @@ from config import (
     OPENCODE_ZEN_FALLBACKS,
 )
 import coding_tools as ct
+import providers
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration - Dynamic provider system with fallback
 # ---------------------------------------------------------------------------
-MODELS = [OPENCODE_ZEN_MODEL]
+# Default models for fallback when no provider is configured
+DEFAULT_MODELS = [OPENCODE_ZEN_MODEL]
 if isinstance(OPENCODE_ZEN_FALLBACKS, str):
-    MODELS += [m.strip() for m in OPENCODE_ZEN_FALLBACKS.split(",") if m.strip()]
+    DEFAULT_MODELS += [m.strip() for m in OPENCODE_ZEN_FALLBACKS.split(",") if m.strip()]
 elif isinstance(OPENCODE_ZEN_FALLBACKS, (list, tuple)):
-    MODELS += [str(m).strip() for m in OPENCODE_ZEN_FALLBACKS if str(m).strip()]
-MAX_TURNS = 8                  # reduced from 12 — most builds finish in 5-8 turns
-HTTP_TIMEOUT = 90              # reduced from 120 — free models respond in ~50s
-BACKOFF_BASE = 2               # seconds; wait = BACKOFF_BASE ** attempt
-MAX_ATTEMPTS_PER_TURN = 2      # reduced from 4 — faster failover between models
+    DEFAULT_MODELS += [str(m).strip() for m in OPENCODE_ZEN_FALLBACKS if str(m).strip()]
+
+MAX_TURNS = 8
+HTTP_TIMEOUT = 90
+BACKOFF_BASE = 2
+MAX_ATTEMPTS_PER_TURN = 2
 
 SANDBOX_ROOT = "/tmp/oxygent_sandbox"
 
@@ -280,14 +283,13 @@ async def _zen_with_tools(
     system: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
-    Call the Zen API with tools. Returns the raw message dict (with .tool_calls
-    or .content), or None only if EVERY model + retry failed.
-
-    RATE-LIMIT IMMUNITY:
-      - Rotates through all free models.
-      - On 429/5xx/timeout: backs off (2**attempt s) and tries the NEXT model.
-      - 120s HTTP timeout (free models are slow).
-    Never raises to the caller.
+    Call AI API with tools using dynamic provider system with fallback.
+    
+    Priority:
+    1. Active configured provider (from admin panel)
+    2. Fallback to default OpenCode Zen models
+    
+    Returns the raw message dict or None if ALL providers/models failed.
     """
     if system:
         full = [{"role": "system", "content": system}] + messages
@@ -295,10 +297,73 @@ async def _zen_with_tools(
         full = list(messages)
 
     last_err = ""
-    attempt = 0
-    model_idx = 0
-    while attempt < MAX_ATTEMPTS_PER_TURN * len(MODELS):
-        model = MODELS[model_idx % len(MODELS)]
+    
+    # Try configured provider first
+    provider = providers.get_provider_for_request()
+    if provider:
+        config = providers.get_provider_config(provider)
+        base_url = config["base_url"]
+        api_key = config["api_key"]
+        model = config["model"]
+        models_list = config["models"] or [model]
+        
+        for attempt in range(MAX_ATTEMPTS_PER_TURN * len(models_list)):
+            current_model = models_list[attempt % len(models_list)]
+            payload = {
+                "model": current_model,
+                "messages": full,
+                "tools": tools,
+                "tool_choice": "auto",
+                "stream": False,
+            }
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            
+            chat_url = f"{base_url.rstrip('/')}"
+            if not chat_url.endswith("/chat/completions"):
+                if not chat_url.endswith("/v1"):
+                    chat_url += "/v1/chat/completions"
+                else:
+                    chat_url += "/chat/completions"
+            
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        chat_url,
+                        headers=headers,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=HTTP_TIMEOUT),
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            return data["choices"][0]["message"]
+                        elif resp.status == 429:
+                            last_err = f"429 rate-limit on {current_model}"
+                            logger.warning(last_err)
+                        elif resp.status >= 500:
+                            last_err = f"{resp.status} server error on {current_model}"
+                            logger.warning(last_err)
+                        else:
+                            body = await resp.text()
+                            last_err = f"{resp.status} {body[:120]}"
+                            logger.error(f"Provider API error: {last_err}")
+            except asyncio.TimeoutError:
+                last_err = f"timeout on {current_model} after {HTTP_TIMEOUT}s"
+                logger.warning(last_err)
+            except Exception as e:
+                last_err = f"exception on {current_model}: {e}"
+                logger.error(last_err)
+
+            if "429" in last_err:
+                await asyncio.sleep(min(8.0, BACKOFF_BASE ** min(attempt, 3)))
+            else:
+                await asyncio.sleep(min(2.0, BACKOFF_BASE ** min(attempt, 1)))
+
+    # Fallback to default OpenCode Zen models
+    logger.info("Falling back to default OpenCode Zen models")
+    for attempt in range(MAX_ATTEMPTS_PER_TURN * len(DEFAULT_MODELS)):
+        model = DEFAULT_MODELS[attempt % len(DEFAULT_MODELS)]
         payload = {
             "model": model,
             "messages": full,
@@ -334,15 +399,12 @@ async def _zen_with_tools(
             last_err = f"exception on {model}: {e}"
             logger.error(last_err)
 
-        # backoff + rotate to next model (faster failover)
         if "429" in last_err:
             await asyncio.sleep(min(8.0, BACKOFF_BASE ** min(attempt, 3)))
         else:
             await asyncio.sleep(min(2.0, BACKOFF_BASE ** min(attempt, 1)))
-        attempt += 1
-        model_idx += 1
 
-    logger.error(f"All models exhausted. Last error: {last_err}")
+    logger.error(f"All providers and models exhausted. Last error: {last_err}")
     return None
 
 

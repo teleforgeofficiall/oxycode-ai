@@ -28,6 +28,8 @@ import database as db
 import asyncio
 import logging
 import datetime
+import json
+import providers
 from config import (
     BOT_TOKEN,
     ADMIN_IDS,
@@ -292,24 +294,31 @@ async def admin_command(update: Update, context):
     maintenance = is_maintenance_mode()
     daily_limit = db.get_daily_limit()
 
+    # Get active provider info
+    active_provider = db.get_active_provider()
+    provider_name = active_provider["name"] if active_provider else "None"
+    provider_status = "Working" if active_provider and active_provider.get("is_working") else "Not Working"
+
     # Build admin panel
-    maint_status = "🟢 ON" if maintenance else "🔴 OFF"
-    maint_btn_text = "🔴 Turn Maintenance OFF" if maintenance else "🟢 Turn Maintenance ON"
+    maint_status = "ON" if maintenance else "OFF"
+    maint_btn_text = "Turn Maintenance OFF" if maintenance else "Turn Maintenance ON"
     maint_callback = "toggle_maintenance_off" if maintenance else "toggle_maintenance_on"
 
     text = (
-        f"🛡 <b>{AGENT_NAME} Admin Panel</b>\n\n"
-        f"<b>📊 Stats:</b>\n"
-        f"• Total Users: <code>{total_users}</code>\n"
-        f"• Daily Limit: <code>{daily_limit}</code> msgs/user\n"
-        f"• Maintenance: {maint_status}\n\n"
-        f"<b>🔧 Controls:</b>"
+        f"{AGENT_NAME} Admin Panel\n\n"
+        f"Stats:\n"
+        f"  Total Users: {total_users}\n"
+        f"  Daily Limit: {daily_limit} msgs/user\n"
+        f"  Maintenance: {maint_status}\n"
+        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"Controls:"
     )
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
-        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
-        [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
+        [InlineKeyboardButton(f"Provider: {provider_name}", callback_data="admin_providers")],
+        [InlineKeyboardButton(f"Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
+        [InlineKeyboardButton("Refresh Stats", callback_data="admin_refresh")],
     ])
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
@@ -319,40 +328,45 @@ async def toggle_maintenance_callback(update: Update, context):
     """Handle maintenance toggle button."""
     query = update.callback_query
     uid = query.from_user.id
-    await query.answer()
 
     if not is_admin(uid):
-        await query.answer("⛔ Admin only!", show_alert=True)
+        await query.answer("Admin only!", show_alert=True)
         return
 
     # Toggle maintenance mode
-    new_state = db.toggle_maintenance()
-    maintenance = is_maintenance_mode()
+    db.toggle_maintenance()
 
     # Build new admin panel
     total_users = db.get_user_count()
     daily_limit = db.get_daily_limit()
+    maintenance = is_maintenance_mode()
 
-    maint_status = "🟢 ON" if maintenance else "🔴 OFF"
-    maint_btn_text = "🔴 Turn Maintenance OFF" if maintenance else "🟢 Turn Maintenance ON"
+    active_provider = db.get_active_provider()
+    provider_name = active_provider["name"] if active_provider else "None"
+    provider_status = "Working" if active_provider and active_provider.get("is_working") else "Not Working"
+
+    maint_status = "ON" if maintenance else "OFF"
+    maint_btn_text = "Turn Maintenance OFF" if maintenance else "Turn Maintenance ON"
     maint_callback = "toggle_maintenance_off" if maintenance else "toggle_maintenance_on"
 
     text = (
-        f"🛡 <b>{AGENT_NAME} Admin Panel</b>\n\n"
-        f"<b>📊 Stats:</b>\n"
-        f"• Total Users: <code>{total_users}</code>\n"
-        f"• Daily Limit: <code>{daily_limit}</code> msgs/user\n"
-        f"• Maintenance: {maint_status}\n\n"
-        f"<b>🔧 Controls:</b>"
+        f"{AGENT_NAME} Admin Panel\n\n"
+        f"Stats:\n"
+        f"  Total Users: {total_users}\n"
+        f"  Daily Limit: {daily_limit} msgs/user\n"
+        f"  Maintenance: {maint_status}\n"
+        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"Controls:"
     )
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
-        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
-        [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
+        [InlineKeyboardButton(f"Provider: {provider_name}", callback_data="admin_providers")],
+        [InlineKeyboardButton(f"Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
+        [InlineKeyboardButton("Refresh Stats", callback_data="admin_refresh")],
     ])
 
-    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await query.edit_message_text(text, reply_markup=keyboard)
 
     # Notify admin
     status_text = "ENABLED" if maintenance else "DISABLED"
@@ -363,10 +377,9 @@ async def admin_refresh_callback(update: Update, context):
     """Handle refresh stats button."""
     query = update.callback_query
     uid = query.from_user.id
-    await query.answer()
 
     if not is_admin(uid):
-        await query.answer("⛔ Admin only!", show_alert=True)
+        await query.answer("Admin only!", show_alert=True)
         return
 
     # Rebuild admin panel with fresh stats
@@ -374,26 +387,32 @@ async def admin_refresh_callback(update: Update, context):
     daily_limit = db.get_daily_limit()
     maintenance = is_maintenance_mode()
 
-    maint_status = "🟢 ON" if maintenance else "🔴 OFF"
-    maint_btn_text = "🔴 Turn Maintenance OFF" if maintenance else "🟢 Turn Maintenance ON"
+    active_provider = db.get_active_provider()
+    provider_name = active_provider["name"] if active_provider else "None"
+    provider_status = "Working" if active_provider and active_provider.get("is_working") else "Not Working"
+
+    maint_status = "ON" if maintenance else "OFF"
+    maint_btn_text = "Turn Maintenance OFF" if maintenance else "Turn Maintenance ON"
     maint_callback = "toggle_maintenance_off" if maintenance else "toggle_maintenance_on"
 
     text = (
-        f"🛡 <b>{AGENT_NAME} Admin Panel</b>\n\n"
-        f"<b>📊 Stats:</b>\n"
-        f"• Total Users: <code>{total_users}</code>\n"
-        f"• Daily Limit: <code>{daily_limit}</code> msgs/user\n"
-        f"• Maintenance: {maint_status}\n\n"
-        f"<b>🔧 Controls:</b>"
+        f"{AGENT_NAME} Admin Panel\n\n"
+        f"Stats:\n"
+        f"  Total Users: {total_users}\n"
+        f"  Daily Limit: {daily_limit} msgs/user\n"
+        f"  Maintenance: {maint_status}\n"
+        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"Controls:"
     )
 
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
-        [InlineKeyboardButton(f"⚙️ Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
-        [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
+        [InlineKeyboardButton(f"Provider: {provider_name}", callback_data="admin_providers")],
+        [InlineKeyboardButton(f"Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
+        [InlineKeyboardButton("Refresh Stats", callback_data="admin_refresh")],
     ])
 
-    await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await query.edit_message_text(text, reply_markup=keyboard)
     await query.answer("Stats refreshed!")
 
 
@@ -401,10 +420,9 @@ async def admin_rate_limit_callback(update: Update, context):
     """Handle rate limit change button — ask admin to send new value."""
     query = update.callback_query
     uid = query.from_user.id
-    await query.answer()
 
     if not is_admin(uid):
-        await query.answer("⛔ Admin only!", show_alert=True)
+        await query.answer("Admin only!", show_alert=True)
         return
 
     current_limit = db.get_daily_limit()
@@ -479,20 +497,313 @@ async def handle_admin_rate_limit_input(update: Update, context):
         [InlineKeyboardButton("📊 Refresh Stats", callback_data="admin_refresh")],
     ])
 
-    await update.message.reply_text(text_msg, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+    await update.message.reply_text(text_msg, reply_markup=keyboard)
+    return True
+
+
+# ==================== PROVIDER MANAGEMENT ====================
+
+async def _build_admin_panel():
+    """Build admin panel text and keyboard."""
+    total_users = db.get_user_count()
+    daily_limit = db.get_daily_limit()
+    maintenance = is_maintenance_mode()
+    active_provider = db.get_active_provider()
+    provider_name = active_provider["name"] if active_provider else "None"
+    provider_status = "Working" if active_provider and active_provider.get("is_working") else "Not Working"
+    maint_status = "ON" if maintenance else "OFF"
+    maint_btn_text = "Turn Maintenance OFF" if maintenance else "Turn Maintenance ON"
+    maint_callback = "toggle_maintenance_off" if maintenance else "toggle_maintenance_on"
+    text = (
+        f"{AGENT_NAME} Admin Panel\n\n"
+        f"Stats:\n"
+        f"  Total Users: {total_users}\n"
+        f"  Daily Limit: {daily_limit} msgs/user\n"
+        f"  Maintenance: {maint_status}\n"
+        f"  Provider: {provider_name} ({provider_status})\n\n"
+        f"Controls:"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(maint_btn_text, callback_data=maint_callback)],
+        [InlineKeyboardButton(f"Provider: {provider_name}", callback_data="admin_providers")],
+        [InlineKeyboardButton(f"Change Rate Limit (now: {daily_limit})", callback_data="admin_rate_limit")],
+        [InlineKeyboardButton("Refresh Stats", callback_data="admin_refresh")],
+    ])
+    return text, keyboard
+
+
+async def admin_providers_callback(update: Update, context):
+    """Handle Provider button - show provider list."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    await query.answer()
+    providers_list = db.get_all_providers()
+    text = "Provider Management\n\n"
+    keyboard_rows = []
+    if providers_list:
+        for p in providers_list:
+            status = "Working" if p.get("is_working") else "Error"
+            active = " [ACTIVE]" if p.get("is_active") else ""
+            text += f"  {p['name']} ({p['provider_type']}) - {status}{active}\n"
+            keyboard_rows.append([InlineKeyboardButton(
+                f"{'* ' if p.get('is_active') else ''}{p['name']} ({status})",
+                callback_data=f"provider_detail_{p['id']}"
+            )])
+    else:
+        text += "  No providers configured yet.\n"
+    keyboard_rows.append([InlineKeyboardButton("+ Add OpenCode", callback_data="provider_add_opencode")])
+    keyboard_rows.append([InlineKeyboardButton("+ Add Gemini", callback_data="provider_add_gemini")])
+    keyboard_rows.append([InlineKeyboardButton("+ Add Custom", callback_data="provider_add_custom")])
+    keyboard_rows.append([InlineKeyboardButton("Back", callback_data="admin_back")])
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard_rows))
+
+
+async def admin_back_callback(update: Update, context):
+    """Handle Back button - return to admin panel."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    await query.answer()
+    text, keyboard = await _build_admin_panel()
+    await query.edit_message_text(text, reply_markup=keyboard)
+
+
+async def provider_detail_callback(update: Update, context):
+    """Show provider detail with options."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    await query.answer()
+    provider_id = int(query.data.replace("provider_detail_", ""))
+    provider = db.get_provider(provider_id)
+    if not provider:
+        await query.answer("Provider not found!", show_alert=True)
+        return
+    status = "Working" if provider.get("is_working") else "Not Working"
+    active = "Yes" if provider.get("is_active") else "No"
+    text = (
+        f"Provider: {provider['name']}\n"
+        f"Type: {provider['provider_type']}\n"
+        f"Status: {status}\n"
+        f"Active: {active}\n"
+        f"Base URL: {provider.get('base_url', 'default')}\n"
+    )
+    if provider.get("error_message"):
+        text += f"Error: {provider['error_message']}\n"
+    keyboard_rows = []
+    if not provider.get("is_active"):
+        keyboard_rows.append([InlineKeyboardButton("Set Active", callback_data=f"provider_activate_{provider_id}")])
+    keyboard_rows.append([InlineKeyboardButton("Test Provider", callback_data=f"provider_test_{provider_id}")])
+    keyboard_rows.append([InlineKeyboardButton("Delete", callback_data=f"provider_delete_{provider_id}")])
+    keyboard_rows.append([InlineKeyboardButton("Back", callback_data="admin_providers")])
+    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard_rows))
+
+
+async def provider_activate_callback(update: Update, context):
+    """Activate a provider."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    provider_id = int(query.data.replace("provider_activate_", ""))
+    provider = db.get_provider(provider_id)
+    if not provider:
+        await query.answer("Provider not found!", show_alert=True)
+        return
+    db.set_provider_active(provider_id)
+    await query.answer(f"Provider {provider['name']} activated!", show_alert=True)
+    # Go back to provider detail
+    query.data = f"provider_detail_{provider_id}"
+    await provider_detail_callback(update, context)
+
+
+async def provider_test_callback(update: Update, context):
+    """Test a provider."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    await query.answer("Testing provider...")
+    provider_id = int(query.data.replace("provider_test_", ""))
+    result = await providers.test_provider(provider_id)
+    if result["ok"]:
+        models_count = len(result["models"])
+        await query.answer(f"Provider works! Found {models_count} models.", show_alert=True)
+    else:
+        await query.answer(f"Provider failed: {result['error'][:100]}", show_alert=True)
+    # Refresh detail view
+    query.data = f"provider_detail_{provider_id}"
+    await provider_detail_callback(update, context)
+
+
+async def provider_delete_callback(update: Update, context):
+    """Delete a provider after confirmation."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    provider_id = int(query.data.replace("provider_delete_", ""))
+    provider = db.get_provider(provider_id)
+    if not provider:
+        await query.answer("Provider not found!", show_alert=True)
+        return
+    db.delete_provider(provider_id)
+    await query.answer(f"Provider {provider['name']} deleted!", show_alert=True)
+    await admin_providers_callback(update, context)
+
+
+async def provider_add_callback(update: Update, context):
+    """Start add provider flow."""
+    query = update.callback_query
+    uid = query.from_user.id
+    if not is_admin(uid):
+        await query.answer("Admin only!", show_alert=True)
+        return
+    await query.answer()
+    provider_type = query.data.replace("provider_add_", "")
+    defaults = providers.PROVIDER_DEFAULTS.get(provider_type, {})
+    display = defaults.get("display_name", provider_type)
+    db.set_user_state(uid, f"waiting_for_provider_name", data=provider_type)
+    await query.edit_message_text(
+        f"Adding {display} Provider\n\n"
+        f"Send a name for this provider (e.g. 'My {display}'):"
+    )
+
+
+async def handle_provider_name_input(update: Update, context):
+    """Handle provider name input."""
+    uid = update.effective_user.id
+    user_state = db.get_user_state(uid)
+    if not user_state or user_state.get("state") != "waiting_for_provider_name":
+        return False
+    if not is_admin(uid):
+        return False
+    name = update.message.text.strip()
+    provider_type = user_state.get("data", "custom")
+    defaults = providers.PROVIDER_DEFAULTS.get(provider_type, {})
+    # Store in state data
+    db.set_user_state(uid, "waiting_for_provider_apikey", data=json.dumps({"type": provider_type, "name": name}))
+    base_url_info = ""
+    if provider_type == "custom":
+        base_url_info = "\nYou will also need to provide a Base URL after the API key."
+    await update.message.reply_text(
+        f"Send the API key for {name}:{base_url_info}\n\n"
+        f"Or send /cancel to abort."
+    )
+    return True
+
+
+async def handle_provider_apikey_input(update: Update, context):
+    """Handle API key input."""
+    uid = update.effective_user.id
+    user_state = db.get_user_state(uid)
+    if not user_state or user_state.get("state") != "waiting_for_provider_apikey":
+        return False
+    if not is_admin(uid):
+        return False
+    api_key = update.message.text.strip()
+    state_data = json.loads(user_state.get("data", "{}"))
+    provider_type = state_data.get("type", "custom")
+    name = state_data.get("name", "Custom Provider")
+    if provider_type == "custom":
+        db.set_user_state(uid, "waiting_for_provider_baseurl", data=json.dumps({"type": provider_type, "name": name, "api_key": api_key}))
+        await update.message.reply_text("Send the Base URL for this provider:\n(e.g. https://api.example.com/v1)\n\nOr send /cancel to abort.")
+    else:
+        # For opencode/gemini, validate immediately
+        await update.message.reply_text("Testing API key...")
+        is_valid, models, error = await providers.validate_provider(provider_type, api_key)
+        if is_valid:
+            provider_id = db.add_provider(name, provider_type, api_key=api_key)
+            db.update_provider_status(provider_id, is_working=1, models_json=json.dumps(models))
+            # Auto-activate if first provider
+            existing = db.get_all_providers()
+            if len(existing) == 1:
+                db.set_provider_active(provider_id)
+            await update.message.reply_text(
+                f"Provider {name} added successfully!\n"
+                f"Models found: {len(models)}\n"
+                f"Status: Working"
+            )
+        else:
+            await update.message.reply_text(
+                f"Provider validation failed:\n{error}\n\n"
+                f"Provider was NOT added. Try again with /admin."
+            )
+        db.clear_user_state(uid)
+    return True
+
+
+async def handle_provider_baseurl_input(update: Update, context):
+    """Handle base URL input for custom provider."""
+    uid = update.effective_user.id
+    user_state = db.get_user_state(uid)
+    if not user_state or user_state.get("state") != "waiting_for_provider_baseurl":
+        return False
+    if not is_admin(uid):
+        return False
+    base_url = update.message.text.strip()
+    state_data = json.loads(user_state.get("data", "{}"))
+    provider_type = state_data.get("type", "custom")
+    name = state_data.get("name", "Custom Provider")
+    api_key = state_data.get("api_key", "")
+    # Validate
+    await update.message.reply_text("Testing provider...")
+    is_valid, models, error = await providers.validate_provider(provider_type, api_key, base_url)
+    if is_valid:
+        provider_id = db.add_provider(name, provider_type, api_key=api_key, base_url=base_url)
+        db.update_provider_status(provider_id, is_working=1, models_json=json.dumps(models))
+        existing = db.get_all_providers()
+        if len(existing) == 1:
+            db.set_provider_active(provider_id)
+        await update.message.reply_text(
+            f"Provider {name} added successfully!\n"
+            f"Models found: {len(models)}\n"
+            f"Status: Working"
+        )
+    else:
+        await update.message.reply_text(
+            f"Provider validation failed:\n{error}\n\n"
+            f"Provider was NOT added. Try again with /admin."
+        )
+    db.clear_user_state(uid)
     return True
 
 
 # ==================== FALLBACK HANDLERS ====================
 
+async def cancel_command(update: Update, context):
+    """/cancel — Cancel current operation."""
+    uid = update.effective_user.id
+    db.clear_user_state(uid)
+    await update.message.reply_text("Operation cancelled.")
+
+
 async def handle_text(update: Update, context):
-    """Handle plain text — show Mini App button or maintenance message."""
+    """Handle plain text - route to appropriate handler based on state."""
     uid = update.effective_user.id
 
-    # Check if admin is in rate limit flow (handled by dedicated handler)
+    # Check provider input states first
     user_state = db.get_user_state(uid)
-    if user_state and user_state.get("state") == "waiting_for_rate_limit":
-        return  # already handled by handle_admin_rate_limit_input
+    if user_state:
+        state = user_state.get("state", "")
+        if state == "waiting_for_rate_limit":
+            return  # handled by handle_admin_rate_limit_input
+        elif state == "waiting_for_provider_name":
+            return await handle_provider_name_input(update, context)
+        elif state == "waiting_for_provider_apikey":
+            return await handle_provider_apikey_input(update, context)
+        elif state == "waiting_for_provider_baseurl":
+            return await handle_provider_baseurl_input(update, context)
 
     # Non-admin blocked
     if not is_admin(uid):
@@ -500,8 +811,7 @@ async def handle_text(update: Update, context):
             await update.message.reply_text(MAINTENANCE_MSG, parse_mode=ParseMode.HTML)
         else:
             await update.message.reply_text(
-                "⛔ <b>Access Denied</b>\n\nThis bot is currently in private beta.",
-                parse_mode=ParseMode.HTML,
+                "Access Denied\n\nThis bot is currently in private beta."
             )
         return
 
@@ -511,10 +821,10 @@ async def handle_text(update: Update, context):
         return
 
     await update.message.reply_text(
-        "Use /start to open the Mini App 👾",
+        "Use /start to open the Mini App",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton(
-                "🚀 Open Mini App",
+                "Open Mini App",
                 web_app=WebAppInfo(url=MINI_APP_URL),
             )],
         ]),
@@ -532,17 +842,42 @@ def main():
     # Commands
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("admin", admin_command))
+    app.add_handler(CommandHandler("cancel", cancel_command))
 
     # Callback queries
     app.add_handler(CallbackQueryHandler(check_joined_callback, pattern="^check_joined$"))
     app.add_handler(CallbackQueryHandler(toggle_maintenance_callback, pattern="^toggle_maintenance_(on|off)$"))
     app.add_handler(CallbackQueryHandler(admin_rate_limit_callback, pattern="^admin_rate_limit$"))
     app.add_handler(CallbackQueryHandler(admin_refresh_callback, pattern="^admin_refresh$"))
+    app.add_handler(CallbackQueryHandler(admin_providers_callback, pattern="^admin_providers$"))
+    app.add_handler(CallbackQueryHandler(admin_back_callback, pattern="^admin_back$"))
+    app.add_handler(CallbackQueryHandler(provider_detail_callback, pattern=r"^provider_detail_\d+$"))
+    app.add_handler(CallbackQueryHandler(provider_activate_callback, pattern=r"^provider_activate_\d+$"))
+    app.add_handler(CallbackQueryHandler(provider_test_callback, pattern=r"^provider_test_\d+$"))
+    app.add_handler(CallbackQueryHandler(provider_delete_callback, pattern=r"^provider_delete_\d+$"))
+    app.add_handler(CallbackQueryHandler(provider_add_callback, pattern="^provider_add_(opencode|gemini|custom)$"))
 
     # Admin rate limit input handler (must be before fallback)
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND,
         handle_admin_rate_limit_input,
+        block=False,
+    ))
+
+    # Provider input handlers (must be before fallback)
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_provider_name_input,
+        block=False,
+    ))
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_provider_apikey_input,
+        block=False,
+    ))
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        handle_provider_baseurl_input,
         block=False,
     ))
 
