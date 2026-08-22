@@ -1,5 +1,5 @@
 import React from 'react';
-import { PlusIcon, GearIcon, HouseIcon } from '@phosphor-icons/react';
+import { PlusIcon, UserCircle, HouseIcon } from '@phosphor-icons/react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Sidebar, cn, useSidebar } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
@@ -150,13 +150,13 @@ export function AppSidebar() {
 				<div className="flex w-full min-w-0 items-center gap-2">
 					<div className="min-w-0 flex-1">
 						<button
-							onClick={() => navigate('/settings')}
+							onClick={() => navigate('/profile')}
 							className={cn(
 								'flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm text-kumo-subtle hover:text-kumo-default hover:bg-bg-4/50 transition-colors',
 							)}
 						>
-							<GearIcon className="size-4" />
-							{!isCollapsed && <span>Settings</span>}
+							<UserCircle className="size-4" />
+							{!isCollapsed && <span>Profile</span>}
 						</button>
 					</div>
 					<ThemeToggle

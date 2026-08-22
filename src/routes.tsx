@@ -1,4 +1,5 @@
 import type { RouteObject } from 'react-router';
+import { Navigate } from 'react-router';
 
 import App from './App';
 import Home from './routes/home';
@@ -15,12 +16,16 @@ const routes = [
         Component: Home,
       },
       {
-        path: 'settings',
+        path: 'profile',
         element: (
           <ProtectedRoute>
             <Settings />
           </ProtectedRoute>
         ),
+      },
+      {
+        path: 'settings',
+        element: <Navigate to="/profile" replace />,
       },
     ],
   },

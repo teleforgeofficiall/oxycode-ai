@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router';
 import { SidebarTrigger, useSidebar } from '@cloudflare/kumo';
-import { GearIcon } from '@phosphor-icons/react';
+import { UserCircle } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router';
 
 export function GlobalHeader() {
@@ -17,10 +17,10 @@ export function GlobalHeader() {
       <div className="flex-1" />
       <div className="flex items-center gap-2">
         <button
-          onClick={() => navigate('/settings')}
+          onClick={() => navigate('/profile')}
           className="size-8 rounded-lg flex items-center justify-center text-kumo-subtle hover:text-kumo-default hover:bg-bg-4/50 transition-colors"
         >
-          <GearIcon className="size-4" />
+          <UserCircle className="size-4" />
         </button>
       </div>
     </header>

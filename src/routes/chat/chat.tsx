@@ -1486,7 +1486,7 @@ function ChatSession() {
 							limitsData,
 							() => {
 								setBackendErrorDialog({ isOpen: false });
-								window.location.href = '/settings';
+								window.location.href = '/profile';
 							},
 							() => setBackendErrorDialog({ isOpen: false }),
 						);

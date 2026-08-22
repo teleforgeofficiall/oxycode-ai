@@ -10,12 +10,13 @@ import { MaintenanceOverlay } from './components/maintenance-overlay';
 import { createQueryClient, queryPersistOptions } from './lib/query-client';
 
 function AppInner() {
-	const { isMaintenance } = useAuth();
+	const { isMaintenance, isAdmin } = useAuth();
+	const showMaintenance = isMaintenance && !isAdmin;
 
 	return (
 		<>
-			{isMaintenance && <MaintenanceOverlay />}
-			{!isMaintenance && (
+			{showMaintenance && <MaintenanceOverlay />}
+			{!showMaintenance && (
 				<AppLayout>
 					<Outlet />
 				</AppLayout>
