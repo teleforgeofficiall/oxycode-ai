@@ -38,8 +38,11 @@ export default function SettingsPage() {
   const { data: limitsData, isLoading: limitsLoading } = useQuery({
     queryKey: ['limits'],
     queryFn: async () => {
-      const res = await apiClient.get('/api/limits');
-      return res.data;
+      const res = await fetch('/api/limits', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('Failed to fetch limits');
+      return res.json();
     },
     enabled: !!token,
   });
@@ -223,7 +226,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h2 className="font-semibold text-kumo-default">Daily Usage</h2>
-              <p className="text-xs text-kumo-subtle">Messages reset at midnight UTC</p>
+              <p className="text-xs text-kumo-subtle">Resets at 12:00 AM IST daily</p>
             </div>
           </div>
 
@@ -237,7 +240,7 @@ export default function SettingsPage() {
                     Daily rate limit reached
                   </p>
                   <p className="text-xs text-red-500/70 mt-1">
-                    Resets at {limitsData?.resetAt ? new Date(limitsData.resetAt).toLocaleTimeString() : 'later'}
+                    Resets at {limitsData?.resetAt ? new Date(limitsData.resetAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '12:00 AM IST'}
                   </p>
                 </div>
               )}
