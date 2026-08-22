@@ -204,7 +204,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip health check and static files
         path = request.url.path
-        if path in ("/api/health", "/docs", "/openapi.json", "/api/auth/telegram") or path.startswith("/static"):
+        if path in ("/api/health", "/api/status", "/docs", "/openapi.json", "/api/auth/telegram") or path.startswith("/static"):
             return await call_next(request)
         
         # Check maintenance mode
@@ -274,6 +274,12 @@ class ProjectCreateRequest(BaseModel):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "oxycode-ai-backend"}
+
+
+@app.get("/api/status")
+async def public_status():
+    """Public endpoint — returns maintenance status without auth."""
+    return {"maintenance": db_is_maintenance_mode()}
 
 
 @app.post("/api/auth/telegram")

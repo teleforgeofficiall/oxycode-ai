@@ -95,7 +95,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const tgUser = getTelegramUser();
 
       if (!initData || !tgUser) {
-        // Not in Telegram Mini App — use stored credentials if available
+        // Not in Telegram — check maintenance from public endpoint
+        try {
+          const resp = await fetch(`${API_BASE}/api/status`);
+          const data = await resp.json();
+          setIsMaintenance(data.maintenance);
+        } catch {
+          // If status check fails, assume maintenance is off
+        }
         setIsLoading(false);
         return;
       }
