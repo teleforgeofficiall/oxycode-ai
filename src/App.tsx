@@ -6,7 +6,7 @@ import { ThemeProvider } from './contexts/theme-context';
 import { Toaster } from 'sonner';
 import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { MaintenanceOverlay } from './components/maintenance-overlay';
+import { MaintenancePage } from './components/maintenance-page';
 import { createQueryClient, queryPersistOptions } from './lib/query-client';
 
 function AppInner() {
@@ -15,12 +15,9 @@ function AppInner() {
 
 	return (
 		<>
-			{showMaintenance && <MaintenanceOverlay />}
-			{!showMaintenance && (
-				<AppLayout>
-					<Outlet />
-				</AppLayout>
-			)}
+			<AppLayout>
+				{showMaintenance ? <MaintenancePage /> : <Outlet />}
+			</AppLayout>
 			<Toaster
 				richColors
 				position="top-right"
