@@ -176,8 +176,13 @@ class ApiClient {
 	private async getAuthHeaders(): Promise<Record<string, string>> {
 		const headers: Record<string, string> = {};
 
+		// JWT auth for OXYCODE VPS backend (stored by auth-context)
+		const jwtToken = localStorage.getItem('oxycode_token');
+		if (jwtToken) {
+			headers['Authorization'] = `Bearer ${jwtToken}`;
+		}
+
 		// Add session token for anonymous users if not authenticated
-		// This will be handled automatically by cookies/credentials for authenticated users
 		const sessionToken = localStorage.getItem('anonymous_session_token');
 		if (sessionToken && !document.cookie.includes('session=')) {
 			headers['X-Session-Token'] = sessionToken;
@@ -188,9 +193,6 @@ class ApiClient {
 			headers['X-CSRF-Token'] = this.csrfTokenInfo.token;
 		}
 
-		// The Cloudflare OAuth token lives in an HttpOnly cookie. The browser
-		// attaches it automatically on same-origin requests; there is nothing
-		// for the API client to add.
 		return headers;
 	}
 

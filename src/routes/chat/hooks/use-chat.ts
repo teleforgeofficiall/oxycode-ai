@@ -356,7 +356,10 @@ export function useChat({
 
 			try {
 				logger.debug('🔗 Attempting WebSocket connection to:', wsUrl);
-				const ws = new WebSocket(wsUrl);
+				// Append JWT token for VPS backend auth
+				const token = localStorage.getItem('oxycode_token');
+				const wsUrlWithAuth = token ? `${wsUrl}${wsUrl.includes('?') ? '&' : '?'}token=${token}` : wsUrl;
+				const ws = new WebSocket(wsUrlWithAuth);
 				setWebsocket(ws);
 
 				// Mark this attempt id
