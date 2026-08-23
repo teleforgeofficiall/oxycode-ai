@@ -956,7 +956,10 @@ def main():
     app.add_error_handler(error_handler)
 
     logger.info(f"🤖 {AGENT_NAME} bot started (Mini App gateway + admin panel mode)")
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(
+        drop_pending_updates=False,
+        allowed_updates=["message", "callback_query"],
+    )
 
 
 if __name__ == "__main__":
