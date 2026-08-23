@@ -684,6 +684,9 @@ export function useChat({
 				if (error instanceof RateLimitExceededError) {
 					const rateLimitMessage = handleRateLimitError(error.details, onDebugMessage);
 					setMessages(prev => [...prev, rateLimitMessage]);
+				} else {
+					const errorMsg = error instanceof Error ? error.message : 'Failed to initialize chat';
+					setMessages(prev => [...prev, createAIMessage('main', `Error: ${errorMsg}. Please try again.`)]);
 				}
 			}
 		}

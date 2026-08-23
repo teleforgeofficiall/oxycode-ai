@@ -22,7 +22,7 @@ function formatTimeAgo(dateStr: string): string {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isMaintenance, isAdmin } = useAuth();
   const [query, setQuery] = useState('');
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatsLoading, setChatsLoading] = useState(false);

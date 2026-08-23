@@ -32,9 +32,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 from urllib.parse import unquote
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel
@@ -227,7 +227,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip health check and static files
         path = request.url.path
-        if path in ("/api/health", "/api/status", "/docs", "/openapi.json", "/api/auth/telegram") or path.startswith("/static"):
+        if path in ("/api/health", "/api/status", "/docs", "/openapi.json", "/api/auth/telegram", "/api/admin/maintenance/toggle", "/api/auth/csrf-token") or path.startswith("/static"):
             return await call_next(request)
         
         # Check maintenance mode
@@ -304,6 +304,59 @@ class ChatMessageRequest(BaseModel):
     message: str
 
 
+class AgentSessionRequest(BaseModel):
+    query: str
+    projectType: Optional[str] = "app"
+    behaviorType: Optional[str] = None
+    images: Optional[list] = []
+
+
+# ==================== WEBSOCKET MANAGER ====================
+
+class ConnectionManager:
+    def __init__(self):
+        self.active: dict[int, list[WebSocket]] = {}
+
+    async def connect(self, websocket: WebSocket, chat_id: int):
+        await websocket.accept()
+        if chat_id not in self.active:
+            self.active[chat_id] = []
+        self.active[chat_id].append(websocket)
+
+    def disconnect(self, websocket: WebSocket, chat_id: int):
+        if chat_id in self.active:
+            self.active[chat_id] = [ws for ws in self.active[chat_id] if ws != websocket]
+            if not self.active[chat_id]:
+                del self.active[chat_id]
+
+    async def send_to_chat(self, chat_id: int, message: dict):
+        if chat_id in self.active:
+            for ws in self.active[chat_id]:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    pass
+
+
+ws_manager = ConnectionManager()
+
+# CSRF token store (simple in-memory)
+_csrf_tokens: dict[str, float] = {}
+
+def _generate_csrf_token() -> str:
+    import secrets
+    token = secrets.token_hex(32)
+    _csrf_tokens[token] = time.time() + 7200
+    return token
+
+def _validate_csrf_token(token: str) -> bool:
+    if token in _csrf_tokens:
+        if time.time() < _csrf_tokens[token]:
+            return True
+        del _csrf_tokens[token]
+    return False
+
+
 # ==================== ROUTES ====================
 
 @app.get("/api/health")
@@ -315,6 +368,226 @@ async def health():
 async def status():
     """Public endpoint — returns maintenance mode status."""
     return {"maintenance": db_is_maintenance_mode()}
+
+
+# ==================== CSRF TOKEN ENDPOINT ====================
+
+@app.get("/api/auth/csrf-token")
+async def csrf_token():
+    token = _generate_csrf_token()
+    return {"data": {"token": token, "expiresIn": 7200}}
+
+
+# ==================== AGENT SESSION ENDPOINT ====================
+
+@app.post("/api/agent")
+async def create_agent_session(
+    request: Request,
+    telegram_id: int = Depends(get_current_user),
+):
+    body = await request.json()
+    query = body.get("query", "")
+    project_type = body.get("projectType", "app")
+    behavior_type = body.get("behaviorType") or "phasic"
+
+    # Validate CSRF token
+    csrf_header = request.headers.get("x-csrf-token") or request.headers.get("X-CSRF-Token")
+    if not csrf_header or not _validate_csrf_token(csrf_header):
+        return JSONResponse(
+            status_code=403,
+            content={"error": {"message": "Invalid or missing CSRF token", "type": "csrf_violation"}},
+        )
+
+    # Create chat in database
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(
+            "INSERT INTO chats (user_id, title) VALUES (%s, %s) RETURNING id, title, created_at, updated_at",
+            (telegram_id, query[:100] if query else "New Chat"),
+        )
+        chat = dict(cur.fetchone())
+        conn.commit()
+    finally:
+        conn.close()
+
+    chat_id = chat["id"]
+
+    # Return NDJSON stream
+    async def stream():
+        yield json.dumps({"template": {"files": []}}) + "\n"
+        yield json.dumps({"behaviorType": behavior_type}) + "\n"
+        yield json.dumps({"projectType": project_type}) + "\n"
+        yield json.dumps({"agentId": str(chat_id)}) + "\n"
+        yield json.dumps({"websocketUrl": f"ws://153.75.247.105:8000/ws/{chat_id}"}) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
+
+# ==================== WEBSOCKET ENDPOINT ====================
+
+@app.websocket("/ws/{chat_id}")
+async def websocket_endpoint(websocket: WebSocket, chat_id: int):
+    # Try to authenticate from query param
+    token = websocket.query_params.get("token")
+    uid = None
+    if token:
+        try:
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            uid = int(payload.get("sub"))
+        except Exception:
+            pass
+
+    await ws_manager.connect(websocket, chat_id)
+    try:
+        # Send agent_connected confirmation with minimal state
+        await websocket.send_json({
+            "type": "agent_connected",
+            "state": {"behaviorType": "phasic", "projectType": "app"},
+            "templateDetails": {},
+            "previewUrl": None,
+        })
+
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            msg_type = data.get("type", "")
+
+            if msg_type == "user_suggestion":
+                user_msg = data.get("message", "")
+                # Persist user message
+                try:
+                    conn = get_db()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT INTO messages (chat_id, role, content) VALUES (%s, 'user', %s)",
+                        (chat_id, user_msg),
+                    )
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+
+                # Generate AI response
+                ai_reply = ""
+                try:
+                    models = [OPENCODE_ZEN_MODEL] + [m for m in OPENCODE_ZEN_FALLBACKS if m != OPENCODE_ZEN_MODEL]
+                    last_err = ""
+                    async with aiohttp.ClientSession() as http:
+                        for model in models:
+                            payload = {"model": model, "messages": [{"role": "user", "content": user_msg}], "stream": False}
+                            for attempt in range(3):
+                                try:
+                                    async with http.post(
+                                        f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
+                                        headers={"Content-Type": "application/json", "User-Agent": "opencode/1.18.16"},
+                                        json=payload,
+                                        timeout=aiohttp.ClientTimeout(total=60),
+                                    ) as resp:
+                                        if resp.status == 200:
+                                            result = await resp.json()
+                                            ai_reply = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                                            break
+                                        body = await resp.text()
+                                        last_err = f"HTTP {resp.status}: {body[:120]}"
+                                        if resp.status in (429, 500, 502, 503, 504) and attempt < 2:
+                                            await asyncio.sleep(2.0 * (attempt + 1))
+                                            continue
+                                        break
+                                except Exception as e:
+                                    last_err = f"{type(e).__name__}: {str(e)[:120]}"
+                                    if attempt < 2:
+                                        await asyncio.sleep(2.0 * (attempt + 1))
+                                        continue
+                                    break
+                            if ai_reply:
+                                break
+                    if not ai_reply:
+                        ai_reply = f"AI temporarily unavailable. Last error: {last_err}"
+                except Exception as e:
+                    ai_reply = f"AI error: {str(e)}"
+
+                # Persist AI message
+                try:
+                    conn = get_db()
+                    cur = conn.cursor()
+                    cur.execute(
+                        "INSERT INTO messages (chat_id, role, content) VALUES (%s, 'assistant', %s)",
+                        (chat_id, ai_reply),
+                    )
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+
+                # Stream response word by word
+                words = ai_reply.split(" ")
+                for i in range(0, len(words), 3):
+                    chunk = " ".join(words[i : i + 3]) + " "
+                    await websocket.send_json({
+                        "type": "conversation_response",
+                        "conversationId": "main",
+                        "message": chunk,
+                        "isStreaming": True,
+                    })
+                    await asyncio.sleep(0.05)
+
+                # Send final complete message
+                await websocket.send_json({
+                    "type": "conversation_response",
+                    "conversationId": "main",
+                    "message": ai_reply,
+                    "isStreaming": False,
+                })
+
+            elif msg_type == "clear_conversation":
+                try:
+                    conn = get_db()
+                    cur = conn.cursor()
+                    cur.execute("DELETE FROM messages WHERE chat_id = %s", (chat_id,))
+                    conn.commit()
+                    conn.close()
+                except Exception:
+                    pass
+                await websocket.send_json({"type": "conversation_cleared"})
+
+            elif msg_type == "get_conversation_state":
+                # Return existing messages from DB
+                history = []
+                try:
+                    conn = get_db()
+                    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                    cur.execute(
+                        "SELECT role, content, created_at FROM messages WHERE chat_id = %s ORDER BY created_at",
+                        (chat_id,),
+                    )
+                    rows = cur.fetchall()
+                    conn.close()
+                    for row in rows:
+                        history.append({
+                            "role": row["role"],
+                            "content": row["content"],
+                            "conversationId": "main",
+                        })
+                except Exception:
+                    pass
+                await websocket.send_json({
+                    "type": "conversation_state",
+                    "state": {"runningHistory": history, "behaviorType": "phasic", "projectType": "app"},
+                })
+
+            elif msg_type == "generate_all":
+                # For new chats, send generation_complete so frontend stops loading
+                await websocket.send_json({"type": "generation_complete"})
+
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket, chat_id)
+    except Exception:
+        ws_manager.disconnect(websocket, chat_id)
 
 
 @app.post("/api/auth/telegram")
@@ -949,6 +1222,16 @@ async def apply_fix(req: AutoFixRequest, telegram_id: int = Depends(get_current_
     except Exception as e:
         logger.error(f"Auto-fix deployment failed: {e}")
         raise HTTPException(500, f"Fix deployment failed: {str(e)}")
+
+
+@app.post("/api/admin/maintenance/toggle")
+async def toggle_maintenance(telegram_id: int = Depends(get_current_user)):
+    """Admin-only: toggle maintenance mode."""
+    if telegram_id not in ADMIN_IDS:
+        raise HTTPException(403, "Admin only")
+    from database import toggle_maintenance as db_toggle
+    new_state = db_toggle()
+    return {"maintenance": new_state, "message": f"Maintenance {'ON' if new_state else 'OFF'}"}
 
 
 # ==================== STARTUP ====================

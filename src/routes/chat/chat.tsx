@@ -68,6 +68,7 @@ import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
+import { MaintenancePage } from '@/components/maintenance-page';
 import {
 	RollbackContext,
 	type RollbackHandler,
@@ -120,7 +121,7 @@ function dropLeadingUserForThink(
 
 function ChatSession() {
 	const { chatId: urlChatId } = useParams();
-
+	const { isMaintenance, isAdmin } = useAuth();
 	const [searchParams] = useSearchParams();
 	const location = useLocation();
 	const userQuery = searchParams.get('query');
@@ -1133,6 +1134,10 @@ function ChatSession() {
 				</div>
 			</div>
 		);
+	}
+
+	if (isMaintenance && !isAdmin) {
+		return <MaintenancePage />;
 	}
 
 	return (
