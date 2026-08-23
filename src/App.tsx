@@ -4,6 +4,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { AuthProvider, useAuth } from './contexts/auth-context';
 import { LimitsProvider } from './contexts/limits-context';
 import { ThemeProvider } from './contexts/theme-context';
+import { BrowserGate } from './components/browser-gate';
 import { Toaster } from 'sonner';
 import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -48,7 +49,9 @@ export default function App() {
 				<ThemeProvider>
 					<AuthProvider>
 						<LimitsProvider>
-							<AppInner />
+							<BrowserGate>
+								<AppInner />
+							</BrowserGate>
 						</LimitsProvider>
 					</AuthProvider>
 				</ThemeProvider>

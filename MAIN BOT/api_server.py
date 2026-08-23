@@ -419,7 +419,8 @@ async def create_agent_session(
         yield json.dumps({"behaviorType": behavior_type}) + "\n"
         yield json.dumps({"projectType": project_type}) + "\n"
         yield json.dumps({"agentId": str(chat_id)}) + "\n"
-        yield json.dumps({"websocketUrl": f"ws://153.75.247.105:8000/ws/{chat_id}"}) + "\n"
+        ws_base = os.environ.get("WEBSOCKET_BASE_URL", "ws://153.75.247.105:8000")
+        yield json.dumps({"websocketUrl": f"{ws_base}/ws/{chat_id}"}) + "\n"
 
     return StreamingResponse(stream(), media_type="application/x-ndjson")
 
@@ -667,7 +668,38 @@ async def get_limits(telegram_id: int = Depends(get_current_user)):
     """Get user's daily usage limits (rolling 24h window)."""
     from database import get_user_usage
     usage = get_user_usage(telegram_id)
-    return usage
+    
+    used = usage.get("used", 0)
+    limit = usage.get("limit", 10)
+    remaining = usage.get("remaining", limit)
+    within = used < limit
+    
+    return {
+        "cloudflareConnectEnabled": False,
+        "config": {
+            "unlimited": False,
+            "limit": {
+                "type": "daily",
+                "maxValue": limit,
+                "window": "24h",
+            },
+        },
+        "usage": {
+            "prompts": {"used": used, "max": limit, "window": "24h"},
+        },
+        "limitCheck": {
+            "withinLimits": within,
+            "exceededLimits": [] if within else [{"type": "prompts", "window": "24h", "current": used, "max": limit, "percentUsed": int(used / limit * 100) if limit else 0}],
+            "shouldUseUserKey": False,
+            "message": f"{used}/{limit} prompts used" if within else "Daily limit reached",
+        },
+        "hasUserToken": False,
+        "hasCloudflareConfigured": False,
+        "aiGatewayConnected": False,
+        "aiGatewayEnabled": False,
+        "aiGatewayPreferenceExplicit": False,
+        "cloudflareCredits": None,
+    }
 
 
 @app.get("/api/projects")

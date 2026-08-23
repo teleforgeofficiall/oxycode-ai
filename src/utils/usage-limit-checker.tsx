@@ -303,8 +303,8 @@ export function checkCanSendPrompt(
 
 	const { limitCheck, hasUserToken, hasCloudflareConfigured, cloudflareCredits } = limitsData;
 
-	// If within limits, allow proceed
-	if (limitCheck.withinLimits) {
+	// If within limits (or no limitCheck returned), allow proceed
+	if (limitCheck?.withinLimits ?? true) {
 		return { canProceed: true };
 	}
 

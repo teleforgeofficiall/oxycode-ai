@@ -62,8 +62,8 @@ export function LimitsProvider({ children }: LimitsProviderProps) {
 	const canProceed = (): CanProceedResult => {
 		if (!query.data) {
 			return {
-				allowed: false,
-				reason: 'Loading usage data...',
+				allowed: true,
+				reason: '',
 				shouldUseByok: false,
 			};
 		}

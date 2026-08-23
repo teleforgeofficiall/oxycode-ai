@@ -24,6 +24,8 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
+from telegram.error import NetworkError, Conflict, TelegramError
+import httpcore
 import database as db
 import asyncio
 import logging
@@ -900,6 +902,27 @@ async def handle_text(update: Update, context):
     )
 
 
+# ==================== ERROR HANDLER ====================
+
+async def error_handler(update: object, context):
+    """Handle errors from handlers — prevents silent failures."""
+    error = context.error
+
+    if isinstance(error, Conflict):
+        logger.warning(f"Polling conflict (expected during restart): {error}")
+        return
+
+    if isinstance(error, (NetworkError, httpcore.ReadError, httpcore.WriteError)):
+        logger.warning(f"Network error (will continue polling): {error}")
+        return
+
+    if isinstance(error, TelegramError):
+        logger.error(f"Telegram API error: {error}")
+        return
+
+    logger.exception(f"Unhandled exception in handler: {error}")
+
+
 # ==================== MAIN ====================
 
 def main():
@@ -928,6 +951,9 @@ def main():
 
     # Single text handler - routes based on user state
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+
+    # Error handler — prevents silent failures
+    app.add_error_handler(error_handler)
 
     logger.info(f"🤖 {AGENT_NAME} bot started (Mini App gateway + admin panel mode)")
     app.run_polling(drop_pending_updates=True)
