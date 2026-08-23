@@ -455,6 +455,29 @@ def init_db():
         )
     ''')
 
+    # Chats table (named conversations)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chats (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            title TEXT DEFAULT 'New Chat',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Messages table (per-chat context)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            chat_id INTEGER REFERENCES chats(id) ON DELETE CASCADE,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            model TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # Default settings
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('daily_limit', '20'))
     cursor.execute('INSERT INTO settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO NOTHING', ('referral_bonus', '20'))
@@ -1574,3 +1597,115 @@ def get_working_providers():
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ==================== CHAT OPERATIONS ====================
+
+def create_chat(user_id, title="New Chat"):
+    """Create a new chat. Returns chat dict."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """INSERT INTO chats (user_id, title, created_at, updated_at)
+           VALUES (%s, %s, NOW(), NOW())
+           RETURNING id, title, created_at, updated_at""",
+        (user_id, title),
+    )
+    chat = dict(cur.fetchone())
+    conn.commit()
+    conn.close()
+    return chat
+
+
+def get_user_chats(user_id):
+    """Get all chats for a user with last message preview."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT c.id, c.title, c.created_at, c.updated_at,
+               (SELECT content FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) as last_message,
+               (SELECT role FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) as last_role,
+               (SELECT created_at FROM messages WHERE chat_id = c.id ORDER BY id DESC LIMIT 1) as last_message_at,
+               (SELECT COUNT(*) FROM messages WHERE chat_id = c.id) as message_count
+        FROM chats c
+        WHERE c.user_id = %s
+        ORDER BY c.updated_at DESC
+    """, (user_id,))
+    chats = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return chats
+
+
+def get_chat(chat_id, user_id):
+    """Get a single chat if it belongs to the user."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT id, title, created_at, updated_at FROM chats WHERE id = %s AND user_id = %s",
+        (chat_id, user_id),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_chat_messages(chat_id, limit=50):
+    """Get messages for a chat, oldest first, limited to `limit` most recent."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT id, role, content, model, created_at
+        FROM (
+            SELECT id, role, content, model, created_at
+            FROM messages
+            WHERE chat_id = %s
+            ORDER BY id DESC
+            LIMIT %s
+        ) sub
+        ORDER BY id ASC
+    """, (chat_id, limit))
+    messages = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return messages
+
+
+def add_message(chat_id, role, content, model=None):
+    """Add a message to a chat. Updates chat's updated_at."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        """INSERT INTO messages (chat_id, role, content, model, created_at)
+           VALUES (%s, %s, %s, %s, NOW())
+           RETURNING id, role, content, model, created_at""",
+        (chat_id, role, content, model),
+    )
+    msg = dict(cur.fetchone())
+    cur.execute("UPDATE chats SET updated_at = NOW() WHERE id = %s", (chat_id,))
+    conn.commit()
+    conn.close()
+    return msg
+
+
+def rename_chat(chat_id, user_id, title):
+    """Rename a chat. Returns True if updated."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE chats SET title = %s, updated_at = NOW() WHERE id = %s AND user_id = %s",
+        (title, chat_id, user_id),
+    )
+    updated = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return updated
+
+
+def delete_chat(chat_id, user_id):
+    """Delete a chat and its messages. Returns True if deleted."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM chats WHERE id = %s AND user_id = %s", (chat_id, user_id))
+    deleted = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted

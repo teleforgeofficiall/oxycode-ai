@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-MAX_TURNS = 8
+MAX_TURNS = 25
 HTTP_TIMEOUT = 90
 BACKOFF_BASE = 2
 MAX_ATTEMPTS_PER_TURN = 2
@@ -258,6 +258,92 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                     "num_results": {"type": "integer"},
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": "List all files in the sandbox or a subdirectory. Shows file tree structure.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Subdirectory to list (default: root)"},
+                    "pattern": {"type": "string", "description": "Optional glob pattern filter"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grep",
+            "description": "Search file contents for a regex pattern across the sandbox. Returns matching lines with file paths.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {"type": "string", "description": "Regex pattern to search for"},
+                    "path": {"type": "string", "description": "Subdirectory to search in (default: root)"},
+                    "file_glob": {"type": "string", "description": "Optional file filter e.g. *.py"},
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_init",
+            "description": "Initialize a git repository in the sandbox.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_commit",
+            "description": "Stage all files and create a git commit in the sandbox.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Commit message"},
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_log",
+            "description": "Show recent git commit history in the sandbox.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Number of commits to show (default 10)"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "code_review",
+            "description": "Review code quality of a file or the entire project. Returns issues, suggestions, and improvements.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "File or directory to review (default: root)"},
+                    "focus": {"type": "string", "description": "Focus area: bugs, performance, security, or general"},
+                },
+                "required": [],
             },
         },
     },
@@ -518,6 +604,125 @@ async def _dispatch(tool_name: str, args: Dict[str, Any], root: str,
             )
         elif tool_name == "web_search":
             res = await ct.web_search(args.get("query", ""), args.get("num_results", 5))
+        elif tool_name == "list_files":
+            target = _jail(args.get("path", "") or "", root)
+            if not target:
+                return json.dumps({"success": False, "error": "path escapes sandbox"})
+            pattern = args.get("pattern", "*")
+            files = []
+            try:
+                for f in Path(target).rglob(pattern):
+                    if f.is_file():
+                        rel = str(f.relative_to(root))
+                        files.append(rel)
+                res = {"success": True, "files": files[:200]}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+        elif tool_name == "grep":
+            target_dir = _jail(args.get("path", "") or "", root)
+            if not target_dir:
+                return json.dumps({"success": False, "error": "path escapes sandbox"})
+            pattern = args.get("pattern", "")
+            file_glob = args.get("file_glob")
+            matches = []
+            try:
+                import re as _re
+                regex = _re.compile(pattern)
+                glob_pattern = file_glob or "**/*"
+                for f in Path(target_dir).rglob(glob_pattern):
+                    if f.is_file():
+                        try:
+                            text = f.read_text(encoding="utf-8", errors="replace")
+                            for i, line in enumerate(text.splitlines(), 1):
+                                if regex.search(line):
+                                    rel = str(f.relative_to(root))
+                                    matches.append(f"{rel}:{i}: {line.strip()[:120]}")
+                                    if len(matches) >= 50:
+                                        break
+                        except Exception:
+                            pass
+                        if len(matches) >= 50:
+                            break
+                res = {"success": True, "matches": matches, "total": len(matches)}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+        elif tool_name == "git_init":
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "git", "init", cwd=root,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                await proc.communicate()
+                res = {"success": True, "output": "git initialized"}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+        elif tool_name == "git_commit":
+            try:
+                await asyncio.create_subprocess_exec(
+                    "git", "add", "-A", cwd=root,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                proc = await asyncio.create_subprocess_exec(
+                    "git", "commit", "-m", args.get("message", "Update"),
+                    cwd=root,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
+                res = {"success": proc.returncode == 0, "output": (stdout or stderr).decode()[:2000]}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+        elif tool_name == "git_log":
+            limit = args.get("limit", 10)
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    "git", "log", f"--oneline", f"-{limit}",
+                    cwd=root,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await proc.communicate()
+                res = {"success": True, "log": (stdout or b"").decode()[:2000]}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
+        elif tool_name == "code_review":
+            target = _jail(args.get("path", "") or "", root)
+            if not target:
+                return json.dumps({"success": False, "error": "path escapes sandbox"})
+            focus = args.get("focus", "general")
+            issues = []
+            try:
+                files_to_review = []
+                p = Path(target)
+                if p.is_file():
+                    files_to_review = [p]
+                else:
+                    for f in p.rglob("*"):
+                        if f.is_file() and f.suffix in {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".json"}:
+                            files_to_review.append(f)
+                for f in files_to_review[:10]:
+                    try:
+                        text = f.read_text(encoding="utf-8", errors="replace")
+                        lines = text.splitlines()
+                        rel = str(f.relative_to(root))
+                        if focus in ("bugs", "general"):
+                            for i, line in enumerate(lines, 1):
+                                if "eval(" in line or "exec(" in line:
+                                    issues.append(f"{rel}:{i}: Potential security issue - eval/exec usage")
+                                if "except:" in line or "except Exception:" in line:
+                                    issues.append(f"{rel}:{i}: Broad exception catch - consider specific exceptions")
+                        if focus in ("performance", "general"):
+                            for i, line in enumerate(lines, 1):
+                                if "import *" in line:
+                                    issues.append(f"{rel}:{i}: Wildcard import - use specific imports")
+                        if focus == "security":
+                            for i, line in enumerate(lines, 1):
+                                if any(x in line for x in ["password", "secret", "token", "api_key"]):
+                                    if "=" in line and "\"" in line:
+                                        issues.append(f"{rel}:{i}: Possible hardcoded secret")
+                    except Exception:
+                        pass
+                res = {"success": True, "issues": issues[:30], "files_reviewed": len(files_to_review)}
+            except Exception as e:
+                res = {"success": False, "error": str(e)}
         else:
             return json.dumps({"success": False, "error": f"unknown tool {tool_name}"})
         return json.dumps(res, default=str)[:4000]
@@ -535,8 +740,11 @@ AGENT_SYSTEM = (
     "1. Create each file with the write_file tool (relative paths only).\n"
     "2. To fix/edit, read_file then patch_file (do NOT recreate everything).\n"
     "3. You may run terminal/execute_code to test.\n"
-    "4. When the project is complete, reply with a short summary (no tool calls).\n"
-    "5. NEVER use absolute paths or '..'. Stay inside the sandbox."
+    "4. Use list_files to see project structure, grep to search code, code_review to check quality.\n"
+    "5. Use git_init/git_commit to version your work as you build.\n"
+    "6. When the project is complete, reply with a short summary (no tool calls).\n"
+    "7. NEVER use absolute paths or '..'. Stay inside the sandbox.\n"
+    "8. You have up to 25 turns — plan your approach before diving in."
 )
 
 # Per-session agent state (for approval flow)

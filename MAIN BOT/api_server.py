@@ -227,7 +227,7 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Skip health check and static files
         path = request.url.path
-        if path in ("/api/health", "/docs", "/openapi.json") or path.startswith("/static"):
+        if path in ("/api/health", "/api/status", "/docs", "/openapi.json", "/api/auth/telegram") or path.startswith("/static"):
             return await call_next(request)
         
         # Check maintenance mode
@@ -292,11 +292,29 @@ class ProjectCreateRequest(BaseModel):
     projectType: Optional[str] = None
 
 
+class ChatCreateRequest(BaseModel):
+    title: str = "New Chat"
+
+
+class ChatRenameRequest(BaseModel):
+    title: str
+
+
+class ChatMessageRequest(BaseModel):
+    message: str
+
+
 # ==================== ROUTES ====================
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "oxycode-ai-backend"}
+
+
+@app.get("/api/status")
+async def status():
+    """Public endpoint — returns maintenance mode status."""
+    return {"maintenance": db_is_maintenance_mode()}
 
 
 @app.post("/api/auth/telegram")
@@ -308,10 +326,6 @@ async def auth_telegram(req: TelegramAuthRequest):
         raise HTTPException(401, str(e))
 
     telegram_id = tg_user["id"]
-
-    # Admin-only restriction
-    if telegram_id not in ADMIN_IDS:
-        raise HTTPException(403, "Access denied. This bot is in private beta.")
 
     # Create/update user in DB
     db_user = db_get_user(telegram_id)
@@ -345,9 +359,11 @@ async def auth_telegram(req: TelegramAuthRequest):
         "user": {
             "id": telegram_id,
             "username": tg_user.get("username"),
-            "firstName": tg_user.get("first_name"),
-            "lastName": tg_user.get("last_name"),
+            "first_name": tg_user.get("first_name"),
+            "last_name": tg_user.get("last_name"),
         },
+        "maintenance": db_is_maintenance_mode() and telegram_id not in ADMIN_IDS,
+        "isAdmin": telegram_id in ADMIN_IDS,
     }
 
 
@@ -491,6 +507,135 @@ async def chat(req: ChatRequest, telegram_id: int = Depends(get_current_user)):
                                 .get("message", {})
                                 .get("content", "")
                             )
+                            return {
+                                "response": content,
+                                "model": model,
+                                "remaining": remaining,
+                            }
+                        body = await resp.text()
+                        last_err = f"HTTP {resp.status}: {body[:120]}"
+                        if resp.status in (429, 500, 502, 503, 504) and attempt < 2:
+                            await asyncio.sleep(2.0 * (attempt + 1))
+                            continue
+                        break
+                except Exception as e:
+                    last_err = f"{type(e).__name__}: {str(e)[:120]}"
+                    if attempt < 2:
+                        await asyncio.sleep(2.0 * (attempt + 1))
+                        continue
+                    break
+
+    raise HTTPException(503, f"AI temporarily unavailable. Last error: {last_err}")
+
+
+# ==================== CHAT SYSTEM ====================
+
+@app.get("/api/chats")
+async def list_chats(telegram_id: int = Depends(get_current_user)):
+    """List user's chats with last message preview."""
+    from database import get_user_chats
+    chats = get_user_chats(telegram_id)
+    return {"chats": chats}
+
+
+@app.post("/api/chats")
+async def create_chat(req: ChatCreateRequest, telegram_id: int = Depends(get_current_user)):
+    """Create a new chat."""
+    from database import create_chat as db_create_chat
+    chat = db_create_chat(telegram_id, req.title)
+    return {"chat": chat}
+
+
+@app.get("/api/chats/{chat_id}")
+async def get_chat(chat_id: int, telegram_id: int = Depends(get_current_user)):
+    """Get a chat with its messages."""
+    from database import get_chat, get_chat_messages
+    chat = get_chat(chat_id, telegram_id)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    messages = get_chat_messages(chat_id)
+    return {"chat": chat, "messages": messages}
+
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(chat_id: int, telegram_id: int = Depends(get_current_user)):
+    """Delete a chat and its messages."""
+    from database import delete_chat
+    deleted = delete_chat(chat_id, telegram_id)
+    if not deleted:
+        raise HTTPException(404, "Chat not found")
+    return {"success": True}
+
+
+@app.put("/api/chats/{chat_id}/rename")
+async def rename_chat(chat_id: int, req: ChatRenameRequest, telegram_id: int = Depends(get_current_user)):
+    """Rename a chat."""
+    from database import rename_chat
+    updated = rename_chat(chat_id, telegram_id, req.title)
+    if not updated:
+        raise HTTPException(404, "Chat not found")
+    return {"success": True}
+
+
+@app.post("/api/chats/{chat_id}/messages")
+async def send_chat_message(chat_id: int, req: ChatMessageRequest, telegram_id: int = Depends(get_current_user)):
+    """Send a message in a chat and get AI response with context."""
+    from database import get_chat, get_chat_messages, add_message, create_chat
+    from database import check_and_increment_usage
+
+    # Verify chat exists and belongs to user
+    chat = get_chat(chat_id, telegram_id)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+
+    # Check daily limit
+    allowed, remaining, reset_at = check_and_increment_usage(telegram_id)
+    if not allowed:
+        raise HTTPException(429, f"Daily message limit reached. Resets at {reset_at}.")
+
+    # Save user message
+    add_message(chat_id, "user", req.message)
+
+    # Load context (last 20 messages)
+    context = get_chat_messages(chat_id, limit=20)
+
+    # Build messages array for AI
+    system_msg = {
+        "role": "system",
+        "content": "You are OXYCODE AI, an intelligent coding assistant. Help users build websites, bots, and apps. Be concise, helpful, and provide working code. When generating code, use proper formatting with markdown code blocks."
+    }
+    ai_messages = [system_msg] + [
+        {"role": m["role"], "content": m["content"]}
+        for m in context
+    ]
+
+    # Try AI with model fallback
+    import aiohttp, asyncio
+    from config import OPENCODE_ZEN_BASE_URL, OPENCODE_ZEN_MODEL, OPENCODE_ZEN_FALLBACKS
+
+    models = [OPENCODE_ZEN_MODEL] + [m for m in OPENCODE_ZEN_FALLBACKS if m != OPENCODE_ZEN_MODEL]
+    last_err = ""
+
+    async with aiohttp.ClientSession() as session:
+        for model in models:
+            payload = {"model": model, "messages": ai_messages, "stream": False}
+            for attempt in range(3):
+                try:
+                    async with session.post(
+                        f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
+                        headers={"Content-Type": "application/json"},
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=60),
+                    ) as resp:
+                        if resp.status == 200:
+                            result = await resp.json()
+                            content = (
+                                result.get("choices", [{}])[0]
+                                .get("message", {})
+                                .get("content", "")
+                            )
+                            # Save assistant message
+                            add_message(chat_id, "assistant", content, model)
                             return {
                                 "response": content,
                                 "model": model,

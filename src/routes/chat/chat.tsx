@@ -79,6 +79,7 @@ import {
 } from './utils/content-detector';
 import { mergeFiles } from '@/utils/file-helpers';
 import { ChatModals } from './components/chat-modals';
+import { DeployPanel } from './components/deploy-panel';
 import { MainContentPanel } from './components/main-content-panel';
 import { ChatInput } from './components/chat-input';
 import { ClarifyingQuestionsPopup } from './components/clarifying-questions-popup';
@@ -93,6 +94,7 @@ import { ApiError } from '@/lib/api-client';
 import { capitalizeFirstLetter } from '@/lib/utils';
 import { usePageHeader } from '@/components/layout/header-context';
 import { CloudflareLogo } from '@/components/icons/logos';
+import { Cloud } from '@phosphor-icons/react';
 
 const isPhasicBlueprint = (
 	blueprint?: BlueprintType | null,
@@ -331,6 +333,8 @@ function ChatSession() {
 	const navigate = useNavigate();
 
 	const [activeFilePath, setActiveFilePath] = useState<string>();
+	const [showDeployPanel, setShowDeployPanel] = useState(false);
+
 	const [view, setView] = useState<
 		| 'editor'
 		| 'preview'
@@ -416,6 +420,15 @@ function ChatSession() {
 									View Live
 								</Button>
 							)}
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-8 shrink-0 px-2"
+								onClick={() => setShowDeployPanel(!showDeployPanel)}
+								title="Deploy Panel"
+							>
+								<Cloud className="size-3.5" />
+							</Button>
 							<Button
 								variant="secondary"
 								size="sm"
@@ -524,6 +537,7 @@ function ChatSession() {
 		files,
 		handleDeployToCloudflare,
 		userAccountDeployEnabled,
+		showDeployPanel,
 	]);
 
 	usePageHeader(headerContent);
@@ -992,6 +1006,15 @@ function ChatSession() {
 				return;
 			}
 
+			const trimmed = newMessage.trim();
+
+			// Handle /deploy command
+			if (trimmed.toLowerCase() === '/deploy') {
+				setNewMessage('');
+				setShowDeployPanel(true);
+				return;
+			}
+
 			// Check usage limits before sending
 			const limitCheck = checkCanSendPrompt(
 				limitsData,
@@ -1009,10 +1032,10 @@ function ChatSession() {
 
 			// When generation is active, send as conversational AI suggestion
 			sendWebSocketMessage(websocket, 'user_suggestion', {
-				message: newMessage,
+				message: trimmed,
 				images: images.length > 0 ? images : undefined,
 			});
-			sendUserMessage(newMessage);
+			sendUserMessage(trimmed);
 			setNewMessage('');
 			// Clear images after sending
 			if (images.length > 0) {
@@ -1360,26 +1383,37 @@ function ChatSession() {
 							</div>
 						</div>
 
-						<ChatInput
-							newMessage={newMessage}
-							onMessageChange={setNewMessage}
-							onSubmit={onNewMessage}
-							images={images}
-							onAddImages={addImages}
-							onRemoveImage={removeImage}
-							isProcessing={isProcessing}
-							isChatDragging={isChatDragging}
-							chatDragHandlers={chatDragHandlers}
-							isChatDisabled={isChatDisabled}
-							isRunning={isRunning}
-							isGenerating={isGenerating}
-							isGeneratingBlueprint={isGeneratingBlueprint}
-							isDebugging={isDebugging}
-							websocket={websocket}
-							chatFormRef={chatFormRef}
-							limitsData={limitsData}
-							onConnectCloudflare={() => {
-								void startCloudflareConnect(window.location.href);
+					<DeployPanel
+						isOpen={showDeployPanel}
+						onClose={() => setShowDeployPanel(false)}
+						currentChatId={urlChatId && urlChatId !== 'new' ? Number(urlChatId) : undefined}
+						onDeployChat={(id) => {
+							void startCloudflareConnect(window.location.href);
+						}}
+						isDeploying={isDeploying}
+						deployedUrl={cloudflareDeploymentUrl}
+					/>
+
+					<ChatInput
+						newMessage={newMessage}
+						onMessageChange={setNewMessage}
+						onSubmit={onNewMessage}
+						images={images}
+						onAddImages={addImages}
+						onRemoveImage={removeImage}
+						isProcessing={isProcessing}
+						isChatDragging={isChatDragging}
+						chatDragHandlers={chatDragHandlers}
+						isChatDisabled={isChatDisabled}
+						isRunning={isRunning}
+						isGenerating={isGenerating}
+						isGeneratingBlueprint={isGeneratingBlueprint}
+						isDebugging={isDebugging}
+						websocket={websocket}
+						chatFormRef={chatFormRef}
+						limitsData={limitsData}
+						onConnectCloudflare={() => {
+							void startCloudflareConnect(window.location.href);
 							}}
 							aboveContent={
 								<ClarifyingQuestionsPopup

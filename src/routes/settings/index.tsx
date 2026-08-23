@@ -1,10 +1,16 @@
+import { useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
-import { ArrowLeft, User, CreditCard, Robot, Cloud, Plug, ArrowSquareOut, Spinner, CheckCircle } from '@phosphor-icons/react';
+import {
+  ArrowLeft, User, CreditCard, Robot, Cloud, Plug, ArrowSquareOut,
+  Spinner, CheckCircle, CaretDown, CaretUp, Lightning, Globe,
+  Database, Paintbrush, Shield, Server,
+} from '@phosphor-icons/react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const AVATAR_COLORS = [
   'bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
@@ -19,10 +25,20 @@ function getAvatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+const CF_BENEFITS = [
+  { icon: Paintbrush, label: 'Live Preview', desc: 'See your website in real-time as AI builds it' },
+  { icon: Lightning, label: 'One-Click Deploy', desc: 'Deploy to Pages & Workers instantly' },
+  { icon: Database, label: 'AI Gateway', desc: 'Smart routing for faster, cheaper AI inference' },
+  { icon: Globe, label: 'Custom Domains', desc: 'Use your own domain on deployed projects' },
+  { icon: Server, label: 'Global CDN', desc: 'Blazing fast load times worldwide' },
+  { icon: Shield, label: 'Zero Config', desc: 'No servers, no VPS — fully serverless' },
+];
+
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
   const queryClient = useQueryClient();
+  const [cfExpanded, setCfExpanded] = useState(false);
 
   // Fetch Cloudflare status
   const { data: cfStatus, isLoading: cfLoading } = useQuery({
@@ -54,7 +70,6 @@ export default function SettingsPage() {
       return res.data;
     },
     onSuccess: (data) => {
-      // Open OAuth popup
       const width = 600;
       const height = 700;
       const left = window.screenX + (window.outerWidth - width) / 2;
@@ -64,7 +79,6 @@ export default function SettingsPage() {
         'cloudflare-oauth',
         `width=${width},height=${height},left=${left},top=${top}`
       );
-      // Listen for popup close (callback page will postMessage)
       const listener = (event: MessageEvent) => {
         if (event.data === 'cloudflare-connected') {
           queryClient.invalidateQueries({ queryKey: ['cloudflare-status'] });
@@ -86,6 +100,7 @@ export default function SettingsPage() {
   });
 
   const cf = cfStatus?.account;
+  const isConnected = cf?.connected;
 
   return (
     <div className="min-h-screen bg-bg-1 dark:bg-kumo-base">
@@ -103,7 +118,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="p-4 space-y-4 max-w-lg mx-auto">
-        {/* Telegram Profile Card — TOP */}
+        {/* Telegram Profile Card */}
         <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-6">
           <div className="flex flex-col items-center gap-4">
             {user?.photo_url ? (
@@ -131,70 +146,120 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Cloudflare Account Section */}
-        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="size-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+        {/* Cloudflare Account Section — Expandable */}
+        <section className="rounded-xl border border-kumo-line bg-bg-2 dark:bg-kumo-canvas overflow-hidden">
+          {/* Header — always visible, clickable */}
+          <button
+            onClick={() => setCfExpanded(!cfExpanded)}
+            className="w-full flex items-center gap-3 p-4 hover:bg-bg-3/30 transition-colors"
+          >
+            <div className="size-10 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
               <Cloud className="size-5 text-orange-500" />
             </div>
-            <div>
+            <div className="flex-1 text-left">
               <h2 className="font-semibold text-kumo-default">Cloudflare Account</h2>
               <p className="text-xs text-kumo-subtle">
-                Connect to deploy your projects
+                {isConnected ? 'Connected — tap to see benefits' : 'Connect to deploy your projects'}
               </p>
             </div>
-          </div>
+            {isConnected && (
+              <CheckCircle className="size-4 text-green-500 shrink-0" />
+            )}
+            <motion.div
+              animate={{ rotate: cfExpanded ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <CaretDown className="size-4 text-kumo-subtle" />
+            </motion.div>
+          </button>
 
-          {cfLoading ? (
-            <Skeleton className="h-10 w-full" />
-          ) : cf?.connected ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-sm text-kumo-subtle">
-                <CheckCircle className="size-4 text-green-500" />
-                <span>Connected</span>
-              </div>
-              <div className="rounded-lg bg-bg-3 dark:bg-kumo-elevated p-3 space-y-1">
-                <p className="text-sm font-medium text-kumo-default">
-                  {cf.account?.accountName || 'Cloudflare Account'}
-                </p>
-                <p className="text-xs text-kumo-subtle">
-                  {cf.account?.email}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-red-500 border-red-500/30 hover:bg-red-500/10"
-                onClick={() => disconnectMutation.mutate()}
-                disabled={disconnectMutation.isPending}
+          {/* Expandable content */}
+          <AnimatePresence>
+            {cfExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                className="overflow-hidden"
               >
-                {disconnectMutation.isPending ? (
-                  <Spinner className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <Plug className="size-4 mr-2" />
-                )}
-                Disconnect
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-kumo-subtle">
-                Connect your Cloudflare account to deploy websites to Pages and bots to Workers.
-              </p>
-              <Button
-                className="w-full bg-orange-500 hover:bg-orange-600 text-white"
-                onClick={() => connectMutation.mutate()}
-                disabled={connectMutation.isPending}
-              >
-                {connectMutation.isPending ? (
-                  <Spinner className="size-4 mr-2 animate-spin" />
-                ) : (
-                  <ArrowSquareOut className="size-4 mr-2" />
-                )}
-                Connect Cloudflare
-              </Button>
-            </div>
-          )}
+                <div className="px-4 pb-4 space-y-3">
+                  {/* Benefits list (show when NOT connected) */}
+                  {!isConnected && (
+                    <div className="space-y-2">
+                      {CF_BENEFITS.map((b) => (
+                        <div key={b.label} className="flex items-start gap-3 p-2 rounded-lg">
+                          <div className="size-8 rounded-md bg-orange-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <b.icon className="size-4 text-orange-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-kumo-default">{b.label}</p>
+                            <p className="text-xs text-kumo-subtle">{b.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Connected state */}
+                  {isConnected && (
+                    <div className="space-y-3">
+                      <div className="rounded-lg bg-bg-3 dark:bg-kumo-elevated p-3 space-y-1">
+                        <p className="text-sm font-medium text-kumo-default">
+                          {cf.account?.accountName || 'Cloudflare Account'}
+                        </p>
+                        <p className="text-xs text-kumo-subtle">{cf.account?.email}</p>
+                      </div>
+
+                      {/* Active benefits */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {CF_BENEFITS.map((b) => (
+                          <div
+                            key={b.label}
+                            className="flex items-center gap-2 p-2 rounded-lg bg-green-500/5 border border-green-500/20"
+                          >
+                            <CheckCircle className="size-3.5 text-green-500 shrink-0" />
+                            <span className="text-xs text-kumo-default">{b.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action button */}
+                  {isConnected ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-red-500 border-red-500/30 hover:bg-red-500/10"
+                      onClick={() => disconnectMutation.mutate()}
+                      disabled={disconnectMutation.isPending}
+                    >
+                      {disconnectMutation.isPending ? (
+                        <Spinner className="size-4 mr-2 animate-spin" />
+                      ) : (
+                        <Plug className="size-4 mr-2" />
+                      )}
+                      Disconnect
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full bg-orange-500 hover:bg-orange-600 text-white"
+                      onClick={() => connectMutation.mutate()}
+                      disabled={connectMutation.isPending}
+                    >
+                      {connectMutation.isPending ? (
+                        <Spinner className="size-4 mr-2 animate-spin" />
+                      ) : (
+                        <ArrowSquareOut className="size-4 mr-2" />
+                      )}
+                      Connect Cloudflare
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
 
         {/* AI Provider Section */}

@@ -1,24 +1,52 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '@/contexts/auth-context';
-import { motion } from 'framer-motion';
-import { PaperPlaneTiltIcon } from '@phosphor-icons/react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { PaperPlaneTiltIcon, ChatsIcon, TrashIcon, PencilSimpleIcon, ClockIcon } from '@phosphor-icons/react';
+import { getChats, deleteChat, renameChat, type Chat } from '@/lib/chat-api';
 
 const MAX_QUERY_LENGTH = 2000;
+
+function formatTimeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
 
 export default function Home() {
   const navigate = useNavigate();
   const { user, isAuthenticated } = useAuth();
   const [query, setQuery] = useState('');
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
 
   const placeholderPhrases = useMemo(
     () => ['a modern portfolio website', 'a Telegram bot', 'a SaaS landing page'],
     [],
   );
 
+  // Load chats on mount
+  useEffect(() => {
+    if (isAuthenticated) {
+      setChatsLoading(true);
+      getChats()
+        .then(setChats)
+        .catch(console.error)
+        .finally(() => setChatsLoading(false));
+    }
+  }, [isAuthenticated]);
+
   const handleCreateApp = () => {
     if (!query.trim() || query.length > MAX_QUERY_LENGTH) return;
-
     const encodedQuery = encodeURIComponent(query.trim());
     navigate(`/chat/new?query=${encodedQuery}`);
     setQuery('');
@@ -28,6 +56,30 @@ export default function Home() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleCreateApp();
+    }
+  };
+
+  const handleDeleteChat = async (e: React.MouseEvent, chatId: number) => {
+    e.stopPropagation();
+    if (!confirm('Delete this chat?')) return;
+    try {
+      await deleteChat(chatId);
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
+    } catch (err) {
+      console.error('Failed to delete chat:', err);
+    }
+  };
+
+  const handleRenameChat = async (chatId: number) => {
+    if (!editTitle.trim()) return;
+    try {
+      await renameChat(chatId, editTitle.trim());
+      setChats((prev) =>
+        prev.map((c) => (c.id === chatId ? { ...c, title: editTitle.trim() } : c)),
+      );
+      setEditingId(null);
+    } catch (err) {
+      console.error('Failed to rename chat:', err);
     }
   };
 
@@ -85,6 +137,83 @@ export default function Home() {
             </span>
           </div>
         </motion.div>
+
+        {/* Chat History */}
+        {isAuthenticated && chats.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="mt-12 mb-8"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <ChatsIcon weight="duotone" className="size-4 text-kumo-subtle" />
+              <h2 className="text-sm font-medium text-kumo-subtle">Recent Chats</h2>
+            </div>
+
+            <div className="grid gap-2">
+              {chats.slice(0, 10).map((chat) => (
+                <motion.div
+                  key={chat.id}
+                  layout
+                  onClick={() => navigate(`/chat/${chat.id}`)}
+                  className="group flex items-center gap-3 p-3 rounded-xl border border-kumo-line/50 bg-bg-3/30 hover:bg-bg-3/60 hover:border-kumo-line transition-all cursor-pointer"
+                >
+                  <div className="flex-1 min-w-0">
+                    {editingId === chat.id ? (
+                      <input
+                        autoFocus
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onBlur={() => handleRenameChat(chat.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleRenameChat(chat.id);
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-full bg-transparent border-b border-brand-emphasis text-sm text-kumo-default focus:outline-none"
+                      />
+                    ) : (
+                      <p className="text-sm font-medium text-kumo-default truncate">
+                        {chat.title}
+                      </p>
+                    )}
+                    {chat.last_message && (
+                      <p className="text-xs text-kumo-subtle truncate mt-0.5">
+                        {chat.last_role === 'assistant' ? '🤖 ' : ''}
+                        {chat.last_message}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingId(chat.id);
+                        setEditTitle(chat.title);
+                      }}
+                      className="size-7 rounded-lg flex items-center justify-center text-kumo-subtle hover:text-kumo-default hover:bg-bg-3 transition-colors"
+                    >
+                      <PencilSimpleIcon className="size-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteChat(e, chat.id)}
+                      className="size-7 rounded-lg flex items-center justify-center text-kumo-subtle hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <TrashIcon className="size-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-1 text-xs text-kumo-subtle shrink-0">
+                    <ClockIcon className="size-3" />
+                    <span>{formatTimeAgo(chat.updated_at)}</span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
       </div>
     </div>
   );

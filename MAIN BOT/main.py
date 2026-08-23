@@ -201,17 +201,6 @@ async def start_command(update: Update, context):
     user = update.effective_user
     uid = user.id
 
-    # Admin-only restriction
-    if not is_admin(uid):
-        if is_maintenance_mode():
-            await update.message.reply_text(MAINTENANCE_MSG, parse_mode=ParseMode.HTML)
-        else:
-            await update.message.reply_text(
-                "⛔ <b>Access Denied</b>\n\nThis bot is currently in private beta.",
-                parse_mode=ParseMode.HTML,
-            )
-        return
-
     is_new_user = db.add_user(uid, user.username, user.first_name, user.last_name)
     u = db.get_user(uid)
 
@@ -894,16 +883,6 @@ async def handle_text(update: Update, context):
             return await handle_provider_baseurl_input(update, context)
         elif state == "waiting_for_provider_model_ids":
             return await handle_provider_model_ids_input(update, context)
-
-    # Non-admin blocked
-    if not is_admin(uid):
-        if is_maintenance_mode():
-            await update.message.reply_text(MAINTENANCE_MSG, parse_mode=ParseMode.HTML)
-        else:
-            await update.message.reply_text(
-                "Access Denied\n\nThis bot is currently in private beta."
-            )
-        return
 
     u = db.get_user(uid)
     if not u:
