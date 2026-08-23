@@ -5,7 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import {
   ArrowLeft, User, CreditCard, Robot, Cloud, Plug, ArrowSquareOut,
   Spinner, CheckCircle, CaretDown, CaretUp, Lightning, Globe,
-  Database, Paintbrush, Shield, Server,
+  Database, Eye, Shield, HardDrives,
 } from '@phosphor-icons/react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -26,11 +26,11 @@ function getAvatarColor(name: string): string {
 }
 
 const CF_BENEFITS = [
-  { icon: Paintbrush, label: 'Live Preview', desc: 'See your website in real-time as AI builds it' },
+  { icon: Eye, label: 'Live Preview', desc: 'See your website in real-time as AI builds it' },
   { icon: Lightning, label: 'One-Click Deploy', desc: 'Deploy to Pages & Workers instantly' },
   { icon: Database, label: 'AI Gateway', desc: 'Smart routing for faster, cheaper AI inference' },
   { icon: Globe, label: 'Custom Domains', desc: 'Use your own domain on deployed projects' },
-  { icon: Server, label: 'Global CDN', desc: 'Blazing fast load times worldwide' },
+  { icon: HardDrives, label: 'Global CDN', desc: 'Blazing fast load times worldwide' },
   { icon: Shield, label: 'Zero Config', desc: 'No servers, no VPS — fully serverless' },
 ];
 
