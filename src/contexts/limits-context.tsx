@@ -68,10 +68,14 @@ export function LimitsProvider({ children }: LimitsProviderProps) {
 			};
 		}
 
+		const data = query.data as any;
+		const withinLimits = data.limitCheck?.withinLimits ?? (data.used < data.limit);
+		const hasUserToken = data.hasUserToken ?? false;
+
 		return canProceedWithRequest({
-			withinLimits: query.data.limitCheck.withinLimits,
-			hasUserToken: query.data.hasUserToken,
-			balance: query.data.cloudflareCredits?.credits,
+			withinLimits,
+			hasUserToken,
+			balance: data.cloudflareCredits?.credits,
 		});
 	};
 

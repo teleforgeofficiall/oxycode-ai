@@ -1337,7 +1337,7 @@ class ApiClient {
 	 * Get user's usage limits and Cloudflare credits
 	 */
 	async getLimitsUsage(): Promise<ApiResponse<any>> {
-		return this.request<any>('/api/limits/usage');
+		return this.request<any>('/api/limits');
 	}
 
 	// ===============================

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Outlet } from 'react-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AuthProvider, useAuth } from './contexts/auth-context';
+import { LimitsProvider } from './contexts/limits-context';
 import { ThemeProvider } from './contexts/theme-context';
 import { Toaster } from 'sonner';
 import { AppLayout } from './components/layout/app-layout';
@@ -46,7 +47,9 @@ export default function App() {
 			>
 				<ThemeProvider>
 					<AuthProvider>
-						<AppInner />
+						<LimitsProvider>
+							<AppInner />
+						</LimitsProvider>
 					</AuthProvider>
 				</ThemeProvider>
 			</PersistQueryClientProvider>
