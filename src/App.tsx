@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Outlet } from 'react-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AuthProvider, useAuth } from './contexts/auth-context';
@@ -11,6 +11,41 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { MaintenancePage } from './components/maintenance-page';
 import { createQueryClient, queryPersistOptions } from './lib/query-client';
 import { Spinner } from '@phosphor-icons/react';
+
+function GlobalErrorCatcher() {
+	useEffect(() => {
+		const handleError = (event: ErrorEvent) => {
+			console.error('[OXYCODE UNCAUGHT]', event.error);
+			try {
+				localStorage.setItem('oxycode_last_error', JSON.stringify({
+					message: event.error?.message || event.message,
+					stack: event.error?.stack || '',
+					time: new Date().toISOString(),
+					url: window.location.href,
+					type: 'uncaught',
+				}));
+			} catch {}
+		};
+		const handleRejection = (event: PromiseRejectionEvent) => {
+			console.error('[OXYCODE UNHANDLED REJECTION]', event.reason);
+			try {
+				localStorage.setItem('oxycode_last_error', JSON.stringify({
+					message: String(event.reason),
+					time: new Date().toISOString(),
+					url: window.location.href,
+					type: 'unhandled_rejection',
+				}));
+			} catch {}
+		};
+		window.addEventListener('error', handleError);
+		window.addEventListener('unhandledrejection', handleRejection);
+		return () => {
+			window.removeEventListener('error', handleError);
+			window.removeEventListener('unhandledrejection', handleRejection);
+		};
+	}, []);
+	return null;
+}
 
 function AppInner() {
 	const { isMaintenance, isAdmin, isLoading } = useAuth();
@@ -42,6 +77,7 @@ export default function App() {
 
 	return (
 		<ErrorBoundary>
+			<GlobalErrorCatcher />
 			<PersistQueryClientProvider
 				client={queryClient}
 				persistOptions={queryPersistOptions}
