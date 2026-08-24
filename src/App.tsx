@@ -6,6 +6,7 @@ import { LimitsProvider } from './contexts/limits-context';
 import { ThemeProvider } from './contexts/theme-context';
 import { BrowserGate } from './components/browser-gate';
 import { Toaster } from 'sonner';
+import { ToastProvider } from '@cloudflare/kumo';
 import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { MaintenancePage } from './components/maintenance-page';
@@ -85,9 +86,11 @@ export default function App() {
 				<ThemeProvider>
 					<AuthProvider>
 						<LimitsProvider>
-							<BrowserGate>
-								<AppInner />
-							</BrowserGate>
+							<ToastProvider>
+								<BrowserGate>
+									<AppInner />
+								</BrowserGate>
+							</ToastProvider>
 						</LimitsProvider>
 					</AuthProvider>
 				</ThemeProvider>

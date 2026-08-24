@@ -370,6 +370,17 @@ async def status():
     return {"maintenance": db_is_maintenance_mode()}
 
 
+@app.post("/api/error")
+async def report_error(request: Request):
+    """Public endpoint — receives frontend error reports for debugging."""
+    try:
+        body = await request.json()
+        logger.error(f"[FRONTEND ERROR] {json.dumps(body, default=str)[:500]}")
+    except Exception:
+        pass
+    return {"ok": True}
+
+
 # ==================== CSRF TOKEN ENDPOINT ====================
 
 @app.get("/api/auth/csrf-token")
