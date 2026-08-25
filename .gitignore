@@ -59,3 +59,23 @@ tsconfig.tsbuildinfo
 
 APIS.md
 .vercel
+
+# Debug/test scripts
+check_*.py
+debug*.py
+deploy_*.py
+diag*.py
+fix_*.py
+health*.py
+pull_*.py
+pyspy*.py
+run_*.py
+sniff.py
+test_*.py
+test_*.sh
+test_*.bash
+update_*.py
+verify_*.py
+e2e_*.py
+*.pyc
+__pycache__
