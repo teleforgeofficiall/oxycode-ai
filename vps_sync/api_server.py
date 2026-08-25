@@ -1194,6 +1194,37 @@ async def delete_chat(chat_id: int, telegram_id: int = Depends(get_current_user)
     return {"success": True}
 
 
+@app.get("/api/agent/{agent_id}/connect")
+async def connect_to_agent(agent_id: str, telegram_id: int = Depends(get_current_user)):
+    """Return WebSocket URL for the frontend to connect to.
+    
+    Frontend calls this before establishing a WebSocket connection.
+    """
+    from database import get_chat
+    try:
+        chat_id = int(agent_id)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Invalid agent ID")
+    
+    chat = await run_db(get_chat, chat_id, telegram_id)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    
+    token = jwt.encode(
+        {"sub": str(telegram_id), "iat": int(time.time()), "exp": int(time.time()) + 86400 * 7},
+        JWT_SECRET,
+        algorithm=JWT_ALGORITHM,
+    )
+    
+    ws_base = os.environ.get("WEBSOCKET_BASE_URL", "wss://oxycode.duckdns.org")
+    websocket_url = f"{ws_base}/ws/{chat_id}?token={token}"
+    
+    return {
+        "websocketUrl": websocket_url,
+        "agentId": agent_id,
+    }
+
+
 @app.put("/api/chats/{chat_id}/rename")
 async def rename_chat(chat_id: int, req: ChatRenameRequest, telegram_id: int = Depends(get_current_user)):
     """Rename a chat."""

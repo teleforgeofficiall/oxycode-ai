@@ -39,6 +39,7 @@ function persistSidebarState(open: boolean) {
 }
 
 function getSidebarDefaultOpen(): boolean {
+	if (typeof window !== 'undefined' && window.innerWidth < 768) return false;
 	const match = document.cookie.match(
 		new RegExp(`(?:^|; )${SIDEBAR_COOKIE_NAME}=([^;]*)`),
 	);
