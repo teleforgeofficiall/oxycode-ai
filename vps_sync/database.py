@@ -201,7 +201,20 @@ class _PooledConn:
         self._pool = pool
 
     def cursor(self, *a, **k):
-        return self._raw.cursor(*a, **k)
+        try:
+            if self._raw.closed:
+                raise psycopg2.InterfaceError("connection already closed")
+            return self._raw.cursor(*a, **k)
+        except psycopg2.InterfaceError:
+            # Neon can kill a pooled connection between get_db()'s SELECT 1
+            # validation and first real use. Swap in a fresh direct connection
+            # so the caller never sees InterfaceError.
+            try:
+                self._raw = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+                _apply_schema(self._raw)
+                return self._raw.cursor(*a, **k)
+            except Exception:
+                raise
 
     def commit(self):
         return self._raw.commit()
@@ -513,8 +526,8 @@ def add_user(user_id, username=None, first_name=None, last_name=None):
         else:
             # Insert new user
             cursor.execute('''
-                INSERT INTO users (user_id, username, first_name, last_name, joined_at)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO users (user_id, username, first_name, last_name, joined_at, prompt_count)
+                VALUES (%s, %s, %s, %s, %s, 0)
             ''', (user_id, username, first_name, last_name, datetime.now()))
             conn.commit()
             return True
@@ -772,6 +785,9 @@ def get_user_usage(user_id):
         }
     
     window_start = row[0]
+    # Normalize naive DB timestamps to aware UTC so comparisons never crash
+    if window_start.tzinfo is None:
+        window_start = window_start.replace(tzinfo=timezone.utc)
     prompt_count = int(row[1] or 0)
     window_end = window_start + timedelta(hours=24)
     
@@ -798,53 +814,72 @@ def get_user_usage(user_id):
 
 def check_and_increment_usage(user_id):
     """Atomically check and increment usage. Returns (allowed, remaining, reset_at)."""
-    conn = get_db()
-    cur = conn.cursor()
-    
-    now = datetime.now(timezone.utc)
-    daily_limit = get_daily_limit()
-    
-    cur.execute(
-        "SELECT window_start, prompt_count FROM users WHERE user_id = %s",
-        (user_id,),
-    )
-    row = cur.fetchone()
-    
-    window_start = None
-    prompt_count = 0
-    
-    if row and row[0]:
-        window_start = row[0]
-        prompt_count = int(row[1] or 0)
-        window_end = window_start + timedelta(hours=24)
-        
-        if now >= window_end:
+    raw = psycopg2.connect(DATABASE_URL, connect_timeout=10)
+    raw.autocommit = False
+    cur = raw.cursor()
+
+    try:
+        now = datetime.now(timezone.utc)
+        daily_limit = get_daily_limit()
+
+        # Ensure user row exists (created by telegram auth; belt-and-suspenders
+        # for any path that calls this before the user row is guaranteed).
+        cur.execute(
+            """INSERT INTO users (user_id, username, joined_at, prompt_count)
+               VALUES (%s, 'api', %s, 0)
+               ON CONFLICT (user_id) DO NOTHING""",
+            (user_id, now),
+        )
+
+        cur.execute(
+            "SELECT window_start, prompt_count FROM users WHERE user_id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+
+        window_start = None
+        prompt_count = 0
+
+        if row and row[0]:
+            window_start = row[0]
+            if window_start.tzinfo is None:
+                window_start = window_start.replace(tzinfo=timezone.utc)
+            prompt_count = int(row[1] or 0)
+            window_end = window_start + timedelta(hours=24)
+
+            if now >= window_end:
+                window_start = now
+                prompt_count = 0
+
+        if not window_start:
             window_start = now
-            prompt_count = 0
-    
-    if not window_start:
-        window_start = now
-    
-    if prompt_count >= daily_limit:
+
+        if prompt_count >= daily_limit:
+            window_end = window_start + timedelta(hours=24)
+            raw.rollback()
+            return False, 0, window_end.isoformat()
+
+        cur.execute(
+            """UPDATE users 
+               SET prompt_count = COALESCE(prompt_count, 0) + 1, 
+                   window_start = COALESCE(window_start, %s)
+               WHERE user_id = %s""",
+            (now, user_id),
+        )
+        raw.commit()
+
+        new_count = prompt_count + 1
+        remaining = max(0, daily_limit - new_count)
         window_end = window_start + timedelta(hours=24)
-        conn.close()
-        return False, 0, window_end.isoformat()
-    
-    cur.execute(
-        """UPDATE users 
-           SET prompt_count = prompt_count + 1, 
-               window_start = COALESCE(window_start, %s)
-           WHERE user_id = %s""",
-        (now, user_id),
-    )
-    conn.commit()
-    
-    new_count = prompt_count + 1
-    remaining = max(0, daily_limit - new_count)
-    window_end = window_start + timedelta(hours=24)
-    
-    conn.close()
-    return True, remaining, window_end.isoformat()
+        return True, remaining, window_end.isoformat()
+    except Exception:
+        try:
+            raw.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
+        raw.close()
 
 
 # ==================== MESSAGE LIMIT ====================

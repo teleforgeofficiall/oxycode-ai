@@ -668,8 +668,9 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // `Code generation has been completed` banner is
                 // misleading. Phasic/agentic emit this once at the end
                 // of a multi-phase build, which is when the banner
-                // makes sense.
-                if (behaviorType !== 'think') {
+                // makes sense. Chat-only backends ack `generate_all`
+                // with zero files — suppress the banner there too.
+                if (behaviorType !== 'think' && files.length > 0) {
                     sendMessage(createAIMessage('generation-complete', 'Code generation has been completed.'));
                 }
 

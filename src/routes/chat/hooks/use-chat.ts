@@ -440,6 +440,24 @@ export function useChat({
 					);
 					// Only handle close for the latest attempt and when we should reconnect
 					if (myAttemptId !== connectAttemptIdRef.current) return;
+
+					// Backend gate rejections: 4001 = maintenance, 4002 = admin-only chat.
+					// Show the reason and stop reconnecting.
+					if (event.code === 4001 || event.code === 4002) {
+						shouldReconnectRef.current = false;
+						setIsThinking(false);
+						setIsGenerating(false);
+						setMessages(() => [
+							createAIMessage(
+								'access-blocked',
+								event.code === 4001
+									? '🛠️ OXYCODE is under maintenance right now. Please try again later.'
+									: '🔒 Chat is currently restricted to admins only.',
+							),
+						]);
+						return;
+					}
+
 					if (!shouldReconnectRef.current) return;
 					// Retry on any close while mounted (including 1000) to improve resilience
 					handleConnectionFailureRef.current?.(wsUrl, disableGenerate, `Connection closed (code: ${event.code})`);

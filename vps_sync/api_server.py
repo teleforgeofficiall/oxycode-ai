@@ -57,11 +57,13 @@ JWT_SECRET = os.getenv("JWT_SECRET", "oxycode-miniapp-secret-change-me")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 7 * 24  # 7 days
 
-OPENCODE_ZEN_BASE_URL = "https://opencode.ai/inference/openai/v1"
-OPENCODE_ZEN_MODEL = os.getenv("OPENCODE_ZEN_MODEL", "mimo-v2.5-free")
+OPENCODE_ZEN_BASE_URL = os.getenv("OPENCODE_ZEN_BASE_URL", "https://opencode.ai/zen/v1")
+OPENCODE_API_KEY = os.getenv("OPENCODE_API_KEY", "")
+# Primary: Ox Alpha Free (x-preview-f-free) — fastest; fails fast (503 <0.5s) when upstream down.
+OPENCODE_ZEN_MODEL = os.getenv("OPENCODE_ZEN_MODEL", "x-preview-f-free")
 OPENCODE_ZEN_FALLBACKS = os.getenv(
     "OPENCODE_ZEN_FALLBACKS",
-    "deepseek-v4-flash-free,hy3-free,nemotron-3.5-lightning-free,nemotron-3-ultra-free,laguna-s-2.1-free"
+    "mimo-v2.5-free,deepseek-v4-flash-free,hy3-free,nemotron-3.5-lightning-free,nemotron-3-ultra-free,laguna-s-2.1-free"
 ).split(",")
 
 # System prompt for the Mini App chat (WebSocket path).
@@ -139,8 +141,17 @@ def db_is_chat_admin_only():
 # DB access must go through asyncio.to_thread.
 
 async def run_db(fn, *args, **kwargs):
-    """Run a blocking DB function off the event loop."""
-    return await asyncio.to_thread(fn, *args, **kwargs)
+    """Run a blocking DB function off the event loop.
+
+    Neon can drop an idle pooled connection mid-call (InterfaceError:
+    connection already closed). One transparent retry gets a fresh
+    connection from get_db()'s validation path and the call succeeds.
+    """
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except psycopg2.InterfaceError:
+        logger.warning(f"[db] stale connection in {fn.__name__}, retrying once")
+        return await asyncio.to_thread(fn, *args, **kwargs)
 
 
 _MAINT_TTL = 10.0  # seconds
@@ -307,10 +318,11 @@ def verify_telegram_init_data(init_data: str) -> dict:
 
 def create_jwt_token(telegram_id: int) -> str:
     """Create a JWT token for the user."""
+    now = int(time.time())
     payload = {
         "sub": str(telegram_id),
-        "iat": datetime.now(timezone.utc),
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRY_HOURS),
+        "iat": now,
+        "exp": now + JWT_EXPIRY_HOURS * 3600,
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -359,19 +371,25 @@ class MaintenanceMiddleware(BaseHTTPMiddleware):
         
         # Maintenance is ON — only allow admins
         auth_header = request.headers.get("authorization", "")
+        is_admin = False
         if auth_header.startswith("Bearer "):
             token = auth_header.replace("Bearer ", "")
             try:
                 payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
                 telegram_id = int(payload["sub"])
-                if telegram_id in ADMIN_IDS:
-                    return await call_next(request)
-                logger.warning(f"[maintenance] admin bypass failed: sub={telegram_id} not in {ADMIN_IDS}")
+                is_admin = telegram_id in ADMIN_IDS
+                if not is_admin:
+                    logger.warning(f"[maintenance] admin bypass failed: sub={telegram_id} not in {ADMIN_IDS}")
             except Exception as e:
-                logger.warning(f"[maintenance] admin token decode failed: {type(e).__name__}: {e}")
+                logger.warning(f"[maintenance] admin token decode failed: {type(e).__name__}: {e}", exc_info=True)
         else:
             logger.warning(f"[maintenance] blocked (no bearer header) path={path}")
-        
+
+        # Admin passes through — call_next OUTSIDE try/except so endpoint
+        # errors propagate normally instead of becoming 503 maintenance.
+        if is_admin:
+            return await call_next(request)
+
         # Non-admin or no token — block
         return JSONResponse(
             status_code=503,
@@ -654,13 +672,16 @@ async def _call_llm(messages: list):
         for model in models:
             payload = {"model": model, "messages": messages, "stream": False}
             logger.info(f"[llm] trying model={model} msgs={len(messages)}")
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
+                    headers = {"Content-Type": "application/json", "User-Agent": "opencode/1.18.16"}
+                    if OPENCODE_API_KEY:
+                        headers["Authorization"] = f"Bearer {OPENCODE_API_KEY}"
                     async with http.post(
                         f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
-                        headers={"Content-Type": "application/json", "User-Agent": "opencode/1.18.16"},
+                        headers=headers,
                         json=payload,
-                        timeout=aiohttp.ClientTimeout(total=60),
+                        timeout=aiohttp.ClientTimeout(total=30),
                     ) as resp:
                         if resp.status == 200:
                             result = await resp.json()
@@ -678,16 +699,16 @@ async def _call_llm(messages: list):
                             break
                         body = await resp.text()
                         last_err = f"{model} HTTP {resp.status}: {body[:120]}"
-                        logger.warning(f"[llm] {last_err} (attempt {attempt + 1}/3)")
-                        if resp.status in (429, 500, 502, 503, 504) and attempt < 2:
-                            await asyncio.sleep(2.0 * (attempt + 1))
+                        logger.warning(f"[llm] {last_err} (attempt {attempt + 1}/2)")
+                        if resp.status in (429, 500, 502, 503, 504) and attempt < 1:
+                            await asyncio.sleep(0.5)
                             continue
                         break
                 except Exception as e:
                     last_err = f"{model} {type(e).__name__}: {str(e)[:120]}"
-                    logger.warning(f"[llm] {last_err} (attempt {attempt + 1}/3)")
-                    if attempt < 2:
-                        await asyncio.sleep(2.0 * (attempt + 1))
+                    logger.warning(f"[llm] {last_err} (attempt {attempt + 1}/2)")
+                    if attempt < 1:
+                        await asyncio.sleep(0.5)
                         continue
                     break
     logger.error(f"[llm] all models failed. Last error: {last_err}")
@@ -1118,51 +1139,17 @@ async def chat(req: ChatRequest, telegram_id: int = Depends(get_current_user)):
 
     # Build AI request
     messages = [{"role": "user", "content": req.message}]
-    payload = {"model": OPENCODE_ZEN_MODEL, "messages": messages, "stream": False}
 
-    # Try primary model, then fallbacks
-    models = [OPENCODE_ZEN_MODEL] + [
-        m for m in OPENCODE_ZEN_FALLBACKS if m != OPENCODE_ZEN_MODEL
-    ]
-    last_err = ""
+    # Shared helper: primary model + fallbacks, fast retries, logging
+    reply, model_used = await _call_llm(messages)
+    if reply:
+        return {
+            "response": reply,
+            "model": model_used,
+            "remaining": remaining,
+        }
 
-    async with aiohttp.ClientSession() as session:
-        for model in models:
-            payload["model"] = model
-            for attempt in range(3):
-                try:
-                    async with session.post(
-                        f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
-                        headers={"Content-Type": "application/json"},
-                        json=payload,
-                        timeout=aiohttp.ClientTimeout(total=60),
-                    ) as resp:
-                        if resp.status == 200:
-                            result = await resp.json()
-                            content = (
-                                result.get("choices", [{}])[0]
-                                .get("message", {})
-                                .get("content", "")
-                            )
-                            return {
-                                "response": content,
-                                "model": model,
-                                "remaining": remaining,
-                            }
-                        body = await resp.text()
-                        last_err = f"HTTP {resp.status}: {body[:120]}"
-                        if resp.status in (429, 500, 502, 503, 504) and attempt < 2:
-                            await asyncio.sleep(2.0 * (attempt + 1))
-                            continue
-                        break
-                except Exception as e:
-                    last_err = f"{type(e).__name__}: {str(e)[:120]}"
-                    if attempt < 2:
-                        await asyncio.sleep(2.0 * (attempt + 1))
-                        continue
-                    break
-
-    raise HTTPException(503, f"AI temporarily unavailable. Last error: {last_err}")
+    raise HTTPException(503, f"AI temporarily unavailable. Last error: {model_used}")
 
 
 # ==================== CHAT SYSTEM ====================
@@ -1246,52 +1233,17 @@ async def send_chat_message(chat_id: int, req: ChatMessageRequest, telegram_id: 
         for m in context
     ]
 
-    # Try AI with model fallback
-    import aiohttp, asyncio
-    from config import OPENCODE_ZEN_BASE_URL, OPENCODE_ZEN_MODEL, OPENCODE_ZEN_FALLBACKS
+    # Try AI with shared model-fallback helper (fast retries + logging)
+    reply, model_used = await _call_llm(ai_messages)
+    if reply:
+        await run_db(add_message, chat_id, "assistant", reply, model_used)
+        return {
+            "response": reply,
+            "model": model_used,
+            "remaining": remaining,
+        }
 
-    models = [OPENCODE_ZEN_MODEL] + [m for m in OPENCODE_ZEN_FALLBACKS if m != OPENCODE_ZEN_MODEL]
-    last_err = ""
-
-    async with aiohttp.ClientSession() as session:
-        for model in models:
-            payload = {"model": model, "messages": ai_messages, "stream": False}
-            for attempt in range(3):
-                try:
-                    async with session.post(
-                        f"{OPENCODE_ZEN_BASE_URL}/chat/completions",
-                        headers={"Content-Type": "application/json"},
-                        json=payload,
-                        timeout=aiohttp.ClientTimeout(total=60),
-                    ) as resp:
-                        if resp.status == 200:
-                            result = await resp.json()
-                            content = (
-                                result.get("choices", [{}])[0]
-                                .get("message", {})
-                                .get("content", "")
-                            )
-                            # Save assistant message
-                            await run_db(add_message, chat_id, "assistant", content, model)
-                            return {
-                                "response": content,
-                                "model": model,
-                                "remaining": remaining,
-                            }
-                        body = await resp.text()
-                        last_err = f"HTTP {resp.status}: {body[:120]}"
-                        if resp.status in (429, 500, 502, 503, 504) and attempt < 2:
-                            await asyncio.sleep(2.0 * (attempt + 1))
-                            continue
-                        break
-                except Exception as e:
-                    last_err = f"{type(e).__name__}: {str(e)[:120]}"
-                    if attempt < 2:
-                        await asyncio.sleep(2.0 * (attempt + 1))
-                        continue
-                    break
-
-    raise HTTPException(503, f"AI temporarily unavailable. Last error: {last_err}")
+    raise HTTPException(503, f"AI temporarily unavailable. Last error: {model_used}")
 
 
 # ==================== CLOUDFLARE OAUTH ====================
