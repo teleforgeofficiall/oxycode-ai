@@ -2,9 +2,8 @@ import paramiko, sys
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 HOST, USER, PASS = "153.75.247.105", "root", "Snapbucks@Billion"
-STAMP = "20260826_quota_final"
+STAMP = "20260826_broadcast_fix"
 FILES = [
-    (r"C:\Users\Teleforge\Desktop\OXYCODE AI BOT\vps_sync\database.py", "/root/oxycode-bot/database.py"),
     (r"C:\Users\Teleforge\Desktop\OXYCODE AI BOT\vps_sync\api_server.py", "/root/oxycode-bot/api_server.py"),
 ]
 

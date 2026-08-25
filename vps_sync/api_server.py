@@ -812,8 +812,10 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int):
                 llm_messages.append({"role": "user", "content": user_msg})
 
                 # Show a thinking indicator while the LLM works.
+                # Broadcast to ALL connections for this chat_id so a reconnecting
+                # client still sees the thinking state.
                 try:
-                    await websocket.send_json({
+                    await ws_manager.send_to_chat(chat_id, {
                         "type": "conversation_response",
                         "conversationId": "main",
                         "reasoning": {"delta": "Thinking…"},
@@ -843,8 +845,9 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int):
                 await _persist_message(chat_id, "assistant", ai_reply, used_model)
 
                 # Close the reasoning indicator, then stream the reply.
+                # Broadcast to ALL connections for this chat_id.
                 try:
-                    await websocket.send_json({
+                    await ws_manager.send_to_chat(chat_id, {
                         "type": "conversation_response",
                         "conversationId": "main",
                         "reasoning": {"done": True},
@@ -855,7 +858,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int):
                 words = ai_reply.split(" ")
                 for i in range(0, len(words), 3):
                     chunk = " ".join(words[i : i + 3]) + " "
-                    await websocket.send_json({
+                    await ws_manager.send_to_chat(chat_id, {
                         "type": "conversation_response",
                         "conversationId": "main",
                         "message": chunk,
@@ -864,7 +867,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int):
                     await asyncio.sleep(0.03)
 
                 # Send final complete message
-                await websocket.send_json({
+                await ws_manager.send_to_chat(chat_id, {
                     "type": "conversation_response",
                     "conversationId": "main",
                     "message": ai_reply,

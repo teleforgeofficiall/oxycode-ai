@@ -299,20 +299,20 @@ export default function SettingsPage() {
             <Skeleton className="h-10 w-full" />
           ) : (
             <div className="space-y-2">
-              {limitsData?.remaining === 0 && (
+              {limitsData?.limitCheck?.withinLimits === false && (
                 <div className="rounded-lg bg-red-500/10 border border-red-500/30 p-3">
                   <p className="text-sm text-red-500 font-medium">
                     Daily rate limit reached
                   </p>
                   <p className="text-xs text-red-500/70 mt-1">
-                    Resets at {limitsData?.resetAt ? new Date(limitsData.resetAt).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : '12:00 AM IST'}
+                    Resets at {limitsData?.usage?.prompts?.window === '24h' ? '12:00 AM IST daily' : '12:00 AM IST'}
                   </p>
                 </div>
               )}
               <div className="flex justify-between text-sm">
                 <span className="text-kumo-subtle">Used today</span>
                 <span className="font-medium text-kumo-default">
-                  {limitsData?.used || 0} / {limitsData?.limit || 20}
+                  {limitsData?.usage?.prompts?.used || 0} / {limitsData?.config?.limit?.maxValue || limitsData?.usage?.prompts?.max || 20}
                 </span>
               </div>
               <div className="w-full bg-bg-3 dark:bg-kumo-elevated rounded-full h-2">
@@ -321,12 +321,12 @@ export default function SettingsPage() {
                     limitsData?.remaining === 0 ? 'bg-red-500' : 'bg-blue-500'
                   }`}
                   style={{
-                    width: `${Math.min(100, ((limitsData?.used || 0) / (limitsData?.limit || 20)) * 100)}%`,
+                    width: `${Math.min(100, ((limitsData?.usage?.prompts?.used || 0) / (limitsData?.config?.limit?.maxValue || limitsData?.usage?.prompts?.max || 20)) * 100)}%`,
                   }}
                 />
               </div>
               <p className="text-xs text-kumo-subtle">
-                {limitsData?.remaining || 0} messages remaining
+                {limitsData?.limitCheck?.withinLimits === false ? 0 : (limitsData?.config?.limit?.maxValue || limitsData?.usage?.prompts?.max || 20) - (limitsData?.usage?.prompts?.used || 0)} messages remaining
               </p>
             </div>
           )}
