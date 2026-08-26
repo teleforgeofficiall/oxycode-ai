@@ -125,9 +125,14 @@
 	--sidebar-width-icon: 52px !important;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 900px) {
 	.vibesdk-sidebar-wrapper {
 		--sidebar-width: 18rem !important;
+	}
+	/* Hide sidebar on mobile/tablet — Telegram WebView reports wider viewport */
+	.vibesdk-sidebar-wrapper > aside[data-sidebar="sidebar"],
+	.vibesdk-sidebar-wrapper > nav[data-sidebar="sidebar"] {
+		display: none !important;
 	}
 }
 
