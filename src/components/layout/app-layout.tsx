@@ -39,7 +39,7 @@ function persistSidebarState(open: boolean) {
 }
 
 function getSidebarDefaultOpen(): boolean {
-	if (typeof window !== 'undefined' && window.innerWidth < 900) return false;
+	if (typeof window !== 'undefined' && window.innerWidth < 1024) return false;
 	const match = document.cookie.match(
 		new RegExp(`(?:^|; )${SIDEBAR_COOKIE_NAME}=([^;]*)`),
 	);
@@ -55,7 +55,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 			defaultOpen={defaultOpen}
 			collapsible="icon"
 			resizable={false}
-			mobileBreakpoint={768}
+			mobileBreakpoint={1024}
 			// peekable
 			onOpenChange={persistSidebarState}
 			className="vibesdk-sidebar-wrapper"

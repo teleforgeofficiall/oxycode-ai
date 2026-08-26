@@ -128,10 +128,14 @@
 @media (max-width: 900px) {
 	.vibesdk-sidebar-wrapper {
 		--sidebar-width: 18rem !important;
+		--sidebar-width-icon: 0px !important;
 	}
-	/* Hide the desktop <aside> strip on mobile — the mobile <nav> uses translate to show/hide itself */
 	.vibesdk-sidebar-wrapper > aside[data-sidebar="sidebar"] {
-		display: none !important;
+		width: 0px !important;
+		min-width: 0px !important;
+		max-width: 0px !important;
+		overflow: hidden !important;
+		border: none !important;
 	}
 }
 
