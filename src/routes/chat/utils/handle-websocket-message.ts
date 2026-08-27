@@ -1048,6 +1048,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     if (delta || done) {
                         setMessages(prev => appendReasoningDelta(prev, conversationId, delta ?? '', done));
                     }
+                    // Sync thinking indicator with reasoning state
+                    if (delta && !done) {
+                        setIsThinking(true);
+                    } else if (done) {
+                        setIsThinking(false);
+                    }
                     break;
                 }
 

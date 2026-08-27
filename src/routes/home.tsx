@@ -77,7 +77,9 @@ export default function Home() {
   const handleCreateApp = () => {
     if (!query.trim() || query.length > MAX_QUERY_LENGTH) return;
     const encodedQuery = encodeURIComponent(query.trim());
-    navigate(`/chat/new?query=${encodedQuery}&agent=${selectedAgent}`);
+    navigate(`/chat/new?query=${encodedQuery}&agent=${selectedAgent}`, {
+      state: { fromPrompt: true },
+    });
     setQuery('');
   };
 
@@ -172,6 +174,11 @@ export default function Home() {
                     {customTitle ? (
                       <>
                         {customTitle}
+                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
+                      </>
+                    ) : query.trim() ? (
+                      <>
+                        {query.trim().slice(0, 50)}{query.trim().length > 50 ? '...' : ''}
                         <PencilSimpleIcon weight="duotone" className="size-3 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                       </>
                     ) : (

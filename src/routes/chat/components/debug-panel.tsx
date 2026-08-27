@@ -517,24 +517,6 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
 
   return (
     <>
-      {/* Toggle Button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 p-3 rounded-full shadow-lg transition-all duration-300 hover:scale-105 ${
-          (errorCount > 0 || warningCount > 0) && !isOpen
-            ? 'bg-red-500 text-white animate-pulse'
-            : 'bg-zinc-800 text-white hover:bg-zinc-700'
-        }`}
-        title={`Debug Console (${errorCount + warningCount} issues)`}
-      >
-        <Bug className="w-4 h-4" />
-        {(errorCount > 0 || warningCount > 0) && (
-          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-            {errorCount > 0 ? errorCount : warningCount}
-          </span>
-        )}
-      </button>
-
       {/* Debug Panel */}
       <div
         ref={panelRef}

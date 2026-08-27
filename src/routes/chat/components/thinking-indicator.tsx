@@ -31,18 +31,27 @@ interface ThinkingIndicatorProps {
 
 export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (!visible) {
       setPhraseIndex(0);
+      setElapsed(0);
       return;
     }
 
-    const interval = setInterval(() => {
+    const phraseInterval = setInterval(() => {
       setPhraseIndex((prev) => (prev + 1) % THINKING_PHRASES.length);
-    }, 2000); // Change phrase every 2 seconds
+    }, 2000);
 
-    return () => clearInterval(interval);
+    const timerInterval = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+
+    return () => {
+      clearInterval(phraseInterval);
+      clearInterval(timerInterval);
+    };
   }, [visible]);
 
   if (!visible) return null;
@@ -92,6 +101,11 @@ export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
               >
                 ...
               </motion.span>
+              {elapsed >= 5 && (
+                <span className="text-xs text-text-50/40 ml-1">
+                  ({elapsed}s)
+                </span>
+              )}
             </motion.span>
           </AnimatePresence>
         </motion.div>

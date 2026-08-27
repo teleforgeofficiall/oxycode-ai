@@ -175,19 +175,19 @@ export function useChat({
 
 	const [isThinking, setIsThinking] = useState(false);
 	
-	// Timeout for stuck thinking state - clear after 120 seconds
+	// Timeout for stuck thinking state - clear after 60 seconds
 	useEffect(() => {
 		if (!isThinking) return;
 		
 		const thinkingTimeout = setTimeout(() => {
-			logger.warn('Thinking state stuck for 120s, auto-clearing');
+			logger.warn('Thinking state stuck for 60s, auto-clearing');
 			setIsThinking(false);
 			setMessages(prev => [
 				...prev,
 				createAIMessage(`thinking_timeout_${Date.now()}`, 
-					'⏱️ AI response is taking longer than expected. Please try sending your message again.')
+					'⚠️ AI took too long to respond. The model might be overloaded. Please try again.')
 			]);
-		}, 120000);
+		}, 60000);
 		
 		return () => clearTimeout(thinkingTimeout);
 	}, [isThinking, setMessages]);
