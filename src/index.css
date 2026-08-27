@@ -122,21 +122,6 @@
 .vibesdk-sidebar-wrapper {
 	height: 100svh;
 	--sidebar-width: 320px !important;
-	--sidebar-width-icon: 52px !important;
-}
-
-@media (max-width: 900px) {
-	.vibesdk-sidebar-wrapper {
-		--sidebar-width: 18rem !important;
-		--sidebar-width-icon: 0px !important;
-	}
-	.vibesdk-sidebar-wrapper > aside[data-sidebar="sidebar"] {
-		width: 0px !important;
-		min-width: 0px !important;
-		max-width: 0px !important;
-		overflow: hidden !important;
-		border: none !important;
-	}
 }
 
 /* Subtle chat edge throb effect */

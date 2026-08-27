@@ -1,35 +1,23 @@
-import React from 'react';
-import { PlusIcon, UserCircle, HouseIcon } from '@phosphor-icons/react';
+import { PlusIcon, UserCircle } from '@phosphor-icons/react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Sidebar, cn, useSidebar } from '@cloudflare/kumo';
-import { useAuth } from '@/contexts/auth-context';
 import { useRecentApps } from '@/hooks/use-apps';
 import { ThemeToggle } from '@/components/theme-toggle';
-
-interface App {
-	id: string;
-	title: string;
-	updatedAt: Date | string | null;
-}
+import type { AppWithFavoriteStatus } from '@/api-types';
 
 function AppMenuItem({
 	app,
 	onClick,
 	active,
-	isCollapsed,
 }: {
-	app: App;
+	app: AppWithFavoriteStatus;
 	onClick: () => void;
 	active: boolean;
-	isCollapsed: boolean;
 }) {
 	const formatTimestamp = () => {
-		const updatedAt =
-			app.updatedAt instanceof Date
-				? app.updatedAt
-				: app.updatedAt
-					? new Date(app.updatedAt)
-					: null;
+		const updatedAt = app.updatedAt
+			? new Date(app.updatedAt)
+			: null;
 		if (!updatedAt) return '';
 		const diff = Math.floor((Date.now() - updatedAt.getTime()) / 1000);
 		if (diff < 60) return 'now';
@@ -42,7 +30,7 @@ function AppMenuItem({
 		<Sidebar.MenuItem>
 			<Sidebar.MenuButton
 				active={active}
-				tooltip={app.title}
+				tooltip={app.name}
 				className="min-h-10 items-start py-2 text-sm"
 				onClick={(e) => {
 					e.preventDefault();
@@ -50,7 +38,7 @@ function AppMenuItem({
 				}}
 			>
 				<span className="flex min-w-0 flex-1 flex-col gap-1">
-					<span className="truncate text-kumo-default">{app.title}</span>
+					<span className="truncate text-kumo-default">{app.name}</span>
 					<span className="text-xs text-kumo-subtle">{formatTimestamp()}</span>
 				</span>
 			</Sidebar.MenuButton>
@@ -59,7 +47,6 @@ function AppMenuItem({
 }
 
 export function AppSidebar() {
-	const { user } = useAuth();
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const { state } = useSidebar();
@@ -138,7 +125,6 @@ export function AppSidebar() {
 									app={app}
 									onClick={() => navigate(`/chat/${app.id}`)}
 									active={pathname === `/chat/${app.id}`}
-									isCollapsed={isCollapsed}
 								/>
 							))}
 						</Sidebar.Menu>

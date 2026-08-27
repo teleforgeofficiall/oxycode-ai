@@ -1,0 +1,11 @@
+# OXYCODE AI Environment Variables
+BOT_TOKEN=YOUR_BOT_TOKEN-MVRtVL1W7HgPc8ikZgWs
+ADMIN_IDS=YOUR_ADMIN_ID,YOUR_ADMIN_ID
+DATABASE_URL=postgresql://neondb_owner:YOUR_NEON_PASSWORD@ep-green-glitter-afigkd43-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require
+JWT_SECRET=YOUR_JWT_SECRET
+MAINTENANCE_MODE=false
+CLOUDFLARE_CLIENT_ID=
+CLOUDFLARE_CLIENT_SECRET=
+CLOUDFLARE_REDIRECT_URI=https://YOUR_VPS_IP:8000/cloudflare-callback
+WEBSOCKET_BASE_URL=wss://oxycode.duckdns.org
+OPENCODE_API_KEY=YOUR_API_KEY

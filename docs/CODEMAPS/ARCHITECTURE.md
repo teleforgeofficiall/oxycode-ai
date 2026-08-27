@@ -1,198 +1,188 @@
 # System Architecture Codemap
 
-**Last Updated:** 2026-08-21
-**Entry Points:** `MAIN BOT/main.py`, `MAIN BOT/api_server.py`
+**Last Updated:** 2026-08-27
+**Entry Points:** `src/main.tsx` (Frontend), `worker/index.ts` (Worker)
 
 ## Overview
 
-OXYGENT is a Telegram bot + Mini App platform providing AI-powered coding assistance. It features a Hermes-style agent loop, sandboxed code execution, Cloudflare deployment with per-user OAuth, credit-based payments, and a FastAPI backend for the web dashboard.
+OXYCODE is a full-stack AI-powered coding platform featuring a React frontend, Cloudflare Worker backend with Durable Objects, real-time WebSocket communication, and a legacy Python Telegram bot. The platform enables users to build, deploy, and ship software through AI agents.
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         Users                                       │
-│          Telegram Client              Browser (Mini App)            │
-└──────────────┬──────────────────────────────┬───────────────────────┘
-               │ Bot API (polling)            │ HTTPS (REST API)
-               ▼                              ▼
-┌──────────────────────────┐   ┌──────────────────────────────────────┐
-│      main.py             │   │         api_server.py                 │
-│  (Telegram Bot Gateway)  │   │    (FastAPI Mini App Backend)        │
-│                          │   │                                      │
-│  • Command routing       │   │  • JWT auth (/api/auth/telegram)     │
-│  • Callback handling     │   │  • Project CRUD (/api/projects)      │
-│  • Admin panel (/admin)  │   │  • AI chat proxy (/api/chat)         │
-│  • Maintenance mode      │   │  • Deploy proxy (/api/deploy)        │
-│  • Mini App launcher     │   │  • Error fix (/api/fix)              │
-└──────────┬───────────────┘   └──────────┬───────────────────────────┘
-           │                              │
-           └──────────────┬───────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        ▼                 ▼                 ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
-│agent_engine  │  │coding_tools  │  │ memory_system    │
-│              │  │              │  │                  │
-│ • Agent Loop │  │ • read_file  │  │ • HermesMemory   │
-│ • Model Rot  │  │ • write_file │  │   (file-based)   │
-│ • Sandboxed  │  │ • search     │  │ • MemoryDatabase │
-│   Execution  │  │ • patch      │  │   (SQLite)       │
-│ • Approval   │  │ • terminal   │  │ • OxygentMemory  │
-│   System     │  │ • exec_code  │  │   (unified)      │
-└──────┬───────┘  │ • web_search │  └────────┬─────────┘
-       │          └──────────────┘           │
-       ▼                                     ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        database.py                                  │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │  Connection Pool (psycopg2 SimpleConnectionPool)            │   │
-│  │  • 5-50 connections, automatic validation & recycling       │   │
-│  │  • Schema isolation (public for prod, clone for staging)    │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│  Tables: users, channels, user_states, code_sessions,              │
-│          payments, broadcasts, settings, deployments,              │
-│          projects, daily_messages, cloudflare_accounts              │
-└──────────────────────────┬──────────────────────────────────────────┘
-                           │ SQL (TLS)
+┌─────────────────────────────────────────────────────────────────────────┐
+│                              Users                                      │
+│              Browser (React SPA)              Telegram Clients          │
+└──────────────────────────┬───────────────────────────┬──────────────────┘
+                           │ HTTPS                     │ Bot API (polling)
+                           ▼                           ▼
+┌──────────────────────────────────────┐  ┌───────────────────────────────┐
+│         src/ (React Frontend)        │  │      MAIN BOT/ (Python)       │
+│                                      │  │                               │
+│  • React 19 + React Router           │  │  • main.py (Entry point)      │
+│  • TanStack Query (server state)     │  │  • agent_engine.py (AI loop)  │
+│  • Tailwind CSS v4 + Kumo UI         │  │  • coding_tools.py (7 tools)  │
+│  • WebSocket (real-time updates)     │  │  • database.py (PostgreSQL)   │
+│  • Vite 8 (build tool)              │  │  • api_server.py (FastAPI)    │
+└──────────────────────────┬───────────┘  └───────────────────────────────┘
+                           │ HTTPS/WS
                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                   PostgreSQL (Neon DB)                               │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Deployment Layer                                  │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  │
-│  │ cloudflare_      │  │ cloudflare_      │  │ deploy_vps.py    │  │
-│  │ oauth.py         │  │ deploy.py        │  │                  │  │
-│  │                  │  │                  │  │ SSH paramiko     │  │
-│  │ Per-user OAuth   │  │ Pages + Workers  │  │ Upload bot + API │  │
-│  │ token management │  │ file deployment  │  │ to VPS           │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    worker/ (Cloudflare Worker)                           │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  worker/index.ts — Request Router                                │   │
+│  │  • Main domain → Hono API routes                                 │   │
+│  │  • Subdomain → User app preview (sandbox/dispatch)              │   │
+│  │  • OAuth routes → Cloudflare Connect                            │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                                                                          │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐     │
+│  │  worker/app.ts    │  │  Durable Objects  │  │  Services         │     │
+│  │  (Hono app)       │  │                  │  │                  │     │
+│  │                   │  │  • CodeGenerator  │  │  • Rate Limiting │     │
+│  │  • CORS/CSRF      │  │    Agent (coding)│  │  • CSRF          │     │
+│  │  • Auth middleware │  │  • ThinkAgent    │  │  • AI Gateway    │     │
+│  │  • Rate limiting  │  │    (agentic loop)│  │  • Sandbox       │     │
+│  │  • Route setup    │  │  • SpaceDO       │  │  • Secrets       │     │
+│  │                   │  │    (git-backed)  │  │  • Auth          │     │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘     │
+│                                                                          │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │  worker/database/ (D1 + Drizzle ORM)                            │   │
+│  │  • Schema: worker/database/schema.ts                            │   │
+│  │  • Services: UserService, AppService, SessionService, etc.      │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────────┘
+                           │
+         ┌─────────────────┼─────────────────┐
+         ▼                 ▼                 ▼
+┌──────────────┐  ┌──────────────┐  ┌──────────────────┐
+│  D1 Database │  │  KV Store    │  │  R2 Storage       │
+│  (Users,     │  │  (Sessions,  │  │  (Files,          │
+│   Apps,      │  │   Cache)     │  │   Artifacts)      │
+│   Config)    │  │              │  │                   │
+└──────────────┘  └──────────────┘  └──────────────────┘
 ```
 
 ## Data Flow
 
-### 1. Telegram Bot Flow
+### 1. Frontend Authentication Flow
 ```
-User sends message → main.py handlers → extract user info
-  → database.get_user(user_id) → Check maintenance mode
-    → If admin: proceed
-    → If non-admin + maintenance: show maintenance message
-  → Route to appropriate handler:
-    → /create → Code session management
-    → /voice → TTS
-    → /search → Web search
-    → /explain, /fix → AI-powered code analysis
-    → Text in session → agent_engine.agent_build()
+Browser → React App → AuthProvider
+  → Check localStorage for JWT token
+  → GET /api/auth/profile → Validate session
+  → If 401 → Show auth modal
+  → If valid → Set user context
 ```
 
-### 2. Mini App Flow
+### 2. Agent Session Flow
 ```
-Browser → api_server.py → Verify Telegram initData → JWT auth
-  → /api/projects → CRUD operations via database.py
-  → /api/chat → Proxy to OpenCode Zen API
-  → /api/deploy → cloudflare_deploy.py → Live URL
-  → /api/fix → error_fix.py → AI analysis → Auto-repair
-```
-
-### 3. Agent Loop Flow (agent_engine.py)
-```
-agent_build(uid, sid, user_message)
-  → Create sandbox at /tmp/oxygent_sandbox/{uid}/{sid}/
-  → Build system prompt with tools + context
-  → Select model (primary: mimo-v2.5-free)
-  → Send to OpenCode Zen API
-  → Parse response for tool_calls
-  → Execute tool in sandbox → Feed result back
-  → Loop (max 8 turns) until: no tool_calls / timeout / approval needed
-  → Collect all files → Return {ok, files, summary}
+User types prompt → Chat component → apiClient.createAgentSession(args)
+  → POST /api/agent (streaming response)
+  → Worker routes to CodeGeneratorAgent or ThinkAgent (Durable Object)
+  → Agent processes with model rotation (OpenCode Zen API)
+  → WebSocket streams progress back to frontend
+  → Frontend updates UI via handle-websocket-message.ts
 ```
 
-### 4. Payment Flow (payments.py)
+### 3. App Preview Flow
 ```
-User taps "Buy Credits" → Show package options
-  → User selects → send_invoice() with Telegram Stars
-  → PreCheckoutQuery → answer_ok=True
-  → SuccessfulPayment → Check charge_id uniqueness
-    → Save to payments table → Add bonus_messages to user
-    → Send confirmation
-```
-
-### 5. Cloudflare Deployment Flow
-```
-Agent calls deploy_website/deploy_bot tool
-  → cloudflare_deploy.py
-    → Get user's CF token from database (cloudflare_accounts table)
-    → If Pages: POST /accounts/{id}/pages/projects → Upload zip
-    → If Workers: PUT /accounts/{id}/workers/scripts/{name}
-    → Return live URL
+Agent generates code → SpaceDO (git-backed files)
+  → Deploy to preview subdomain (e.g., {appid}.preview.domain)
+  → Worker index.ts routes subdomain requests
+  → proxyToSandbox() → Live preview
+  → OR dispatchToWorker() → Permanent deployment
 ```
 
-### 6. Error Fix Flow
+### 4. Cloudflare OAuth Flow
 ```
-User clicks "Fix" in Mini App
-  → /api/fix → error_fix.py
-    → Build fix prompt with error + project files
-    → Send to OpenCode AI for analysis
-    → Parse AI response for fixes
-    → If autoFixable: /api/fix/apply → Re-deploy to Cloudflare
-    → Return fix result to frontend
+User clicks "Connect Cloudflare" → /api/cloudflare/connect
+  → Redirect to CF OAuth authorization
+  → User authorizes → /oauth/cloudflare/callback
+  → Exchange code for API token → Store in KV
+  → User can now deploy to their own CF account
+```
+
+### 5. Real-time WebSocket Flow
+```
+Frontend connects → ws://domain/api/ws?ticket={token}
+  → Worker authenticates via ticket
+  → Joins agent session room
+  → Receives streaming events:
+    - message_chunk (AI text)
+    - file_update (code changes)
+    - phase_change (planning/implementing/reviewing)
+    - deployment_status
+  → Frontend updates via use-chat.ts hook
 ```
 
 ## Component Relationships
 
 | Component | Depends On | Role |
 |-----------|-----------|------|
-| `main.py` | All modules | Telegram bot entry point, command/callback routing |
-| `api_server.py` | `database`, `config`, `error_fix`, `cloudflare_oauth`, `cloudflare_deploy` | FastAPI Mini App backend |
-| `config.py` | (none) | Environment variables, AI models, messages, limits |
-| `database.py` | `config.py` | PostgreSQL CRUD, connection pooling, schema isolation |
-| `agent_engine.py` | `config`, `coding_tools` | AI agent loop, model rotation, sandboxed execution |
-| `coding_tools.py` | (none) | 7-tool sandbox (file ops, terminal, web search) |
-| `payments.py` | `database.py` | Telegram Stars payments, credit management |
-| `memory_system.py` | (none) | Triple-layer memory (file + SQLite + unified) |
-| `context_engine.py` | (none) | Token tracking, auto-compaction (MAIN BOT) |
-
-| `cloudflare_oauth.py` | `database.py` | Per-user Cloudflare OAuth token management |
-| `cloudflare_deploy.py` | `cloudflare_oauth.py` | Deploy to CF Pages/Workers using user tokens |
-| `error_fix.py` | `config.py` | AI-powered error detection and auto-repair |
-| `project_analyzer.py` | (none) | Auto-detect project type/stack from prompt |
-| `deploy_vps.py` | (none) | SSH-based VPS deployment (paramiko) |
+| `src/main.tsx` | React Router | Frontend entry point |
+| `src/App.tsx` | AuthProvider, LimitsProvider, ThemeProvider | Root layout with providers |
+| `src/routes.tsx` | React Router | Route definitions |
+| `src/lib/api-client.ts` | api-types.ts, auth-context | HTTP client for all API calls |
+| `src/lib/query-keys.ts` | (none) | Centralized TanStack Query keys |
+| `src/routes/chat/chat.tsx` | use-chat, WebSocket | Main chat interface |
+| `src/routes/chat/hooks/use-chat.ts` | api-client, WebSocket | Chat state management |
+| `src/routes/chat/utils/handle-websocket-message.ts` | (none) | WebSocket event parser |
+| `worker/index.ts` | app, services, Durable Objects | Worker entry, request routing |
+| `worker/app.ts` | Hono, middleware, routes | API application setup |
+| `worker/api/routes/index.ts` | All route modules | Route registration |
+| `worker/database/schema.ts` | Drizzle ORM | D1 database schema |
+| `worker/agents/core/codingAgent.ts` | SpaceDO | Code generation agent |
+| `worker/agents/think/ThinkAgent.ts` | SpaceDO | Agentic think loop |
+| `shared/types/errors.ts` | (none) | Shared error types |
+| `shared/constants/limits.ts` | (none) | Shared limit constants |
 
 ## Two Deployments
 
-### MAIN BOT
-- Full production deployment with all modules
-- 18 Python files (including API server, Cloudflare integration, error fix)
-- PostgreSQL via Neon DB (psycopg2 connection pool)
-- Mini App backend (FastAPI) for web dashboard
-- Cloudflare deployment with per-user OAuth
-- systemd services for bot and API server
+### React Frontend (src/)
+- React 19 + React Router 7
+- TanStack Query for server state
+- Tailwind CSS v4 + @cloudflare/kumo UI
+- Vite 8 build tool
+- Deployed to Cloudflare Pages
+
+### Cloudflare Worker (worker/)
+- Hono web framework
+- Durable Objects for stateful agents
+- D1 database with Drizzle ORM
+- KV for caching and sessions
+- R2 for file storage
+
+### Legacy Python Bot (MAIN BOT/)
+- Telegram bot with polling
+- PostgreSQL via psycopg2
+- FastAPI Mini App backend
+- Hermes-style agent loop
 
 ## External API Endpoints
 
 | Service | Base URL | Auth | Purpose |
 |---------|----------|------|---------|
-| OpenCode Zen | `https://opencode.ai/zen/v1` | None (free tier) | AI model inference |
-| Telegram Bot API | `https://api.telegram.org` | Bot token | User interaction |
-| PostgreSQL (Neon) | Connection string | DB credentials | Persistent storage |
-| Cloudflare API | `https://api.cloudflare.com` | User OAuth tokens | Deployment |
-| DuckDuckGo | `https://api.duckduckgo.com` | None | Web search |
+| OpenCode Zen | `https://opencode.ai/zen/v1` | API key | AI model inference |
+| Cloudflare API | `https://api.cloudflare.com` | OAuth tokens | Deployment, AI Gateway |
+| GitHub API | `https://api.github.com` | OAuth tokens | Repository export |
+| Telegram Bot API | `https://api.telegram.org` | Bot token | Legacy bot interaction |
+| PostgreSQL (Neon) | Connection string | DB credentials | Legacy bot storage |
 
 ## Key Design Patterns
 
-1. **Agent Loop** — Hermes-style THINK→ACT→OBSERVE cycle with max 8 turns
-2. **Model Rotation** — Failover across free-tier models with exponential backoff
-3. **Sandboxed Execution** — Per-user/per-session filesystem isolation
-4. **Dual Memory** — File-based (HermesMemory) + PostgreSQL (users table)
-5. **Credit System** — Telegram Stars for paid usage, daily limits for free tier
-6. **Per-User OAuth** — Each user connects their own Cloudflare account
-7. **Approval System** — Dangerous tools require user confirmation
-9. **Connection Pooling** — 5-50 connections with automatic validation and recycling
+1. **Agent Loop** — THINK→ACT→OBSERVE cycle with model rotation
+2. **Durable Objects** — Stateful agents (CodeGenerator, ThinkAgent, SpaceDO)
+3. **Streaming WebSocket** — Real-time progress updates to frontend
+4. **Per-User OAuth** — Each user connects their own Cloudflare account
+5. **Model Rotation** — Failover across free-tier models with exponential backoff
+6. **Sandboxed Execution** — Per-user filesystem isolation for code execution
+7. **Git-backed Files** — SpaceDO stores app files with git history
+8. **CSRF Protection** — Double-submit cookie pattern for state-changing requests
+9. **Rate Limiting** — Per-user and global rate limits via Durable Objects
+10. **Feature Flags** — FeatureProvider controls UI feature availability
 
 ## Related Codemaps
 
 - [MODULES.md](MODULES.md) — Detailed module documentation
-- [FILES.md](FILES.md) — Directory structure and file purposes
+- [FILES.md](FILES.md) — Complete file listing

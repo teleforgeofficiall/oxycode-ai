@@ -1,198 +1,357 @@
 # Files Codemap
 
-**Last Updated:** 2026-08-21
+**Last Updated:** 2026-08-27
 
 ## Project Root
 
 ```
 C:\Users\Teleforge\Desktop\OXYCODE AI BOT\
-├── README.md                    # Project overview and setup
-├── .gitignore                   # Git ignore rules
+├── src/                    # React frontend (TypeScript)
+├── worker/                 # Cloudflare Worker backend
+├── shared/                 # Shared types and constants
+├── MAIN BOT/               # Legacy Python Telegram bot
+├── vibesdk/                # Cloudflare Workers SDK (reference)
+├── docs/                   # Documentation
+├── scripts/                # Build/setup scripts
+├── public/                 # Static assets
+├── package.json            # Node.js dependencies
+├── vite.config.ts          # Vite build config
+├── tsconfig.json           # TypeScript config
+├── eslint.config.js        # ESLint config
+├── vitest.config.ts        # Test config
+├── ARCHITECTURE.md         # Technical architecture
+├── AGENTS.md               # Agent instructions
+├── CLAUDE.md               # Claude Code instructions
+├── README.md               # Project overview
+└── QUICKSTART.md           # Quick start guide
+```
+
+---
+
+## src/ (React Frontend)
+
+```
+src/
+├── main.tsx                          # Entry point
+├── App.tsx                           # Root component
+├── routes.tsx                        # Route definitions
+├── api-types.ts                      # API type definitions
+├── index.css                         # Global styles (Tailwind v4)
+├── vite-env.d.ts                     # Vite type declarations
 │
-├── MAIN BOT/                    # Production bot deployment (18 files)
-├── vibesdk/                     # Cloudflare Workers SDK (active)
-├── vibesdk-read/                # Cloudflare Workers SDK (read-only reference)
-└── docs/                        # Documentation (codemaps)
+├── routes/
+│   ├── home.tsx                      # Home page
+│   ├── protected-route.tsx           # Auth guard
+│   └── chat/
+│       ├── chat.tsx                  # Main chat interface
+│       ├── components/
+│       │   ├── chat-input.tsx        # Message input
+│       │   ├── messages.tsx          # Message list
+│       │   ├── preview-iframe.tsx    # Live preview
+│       │   ├── file-explorer.tsx     # File browser
+│       │   ├── phase-timeline.tsx    # Agent progress
+│       │   ├── deploy-panel.tsx      # Deploy controls
+│       │   ├── debug-panel.tsx       # Debug viewer
+│       │   ├── terminal.tsx          # Terminal output
+│       │   ├── blueprint.tsx         # Blueprint display
+│       │   ├── artifact-repo-viewer.tsx  # Repo viewer
+│       │   ├── database-viewer.tsx   # DB inspector
+│       │   ├── docs-sidebar.tsx      # Documentation
+│       │   ├── export-button.tsx     # Export controls
+│       │   ├── clarifying-questions-popup.tsx  # Questions
+│       │   ├── thinking-indicator.tsx # Thinking animation
+│       │   └── view-*.tsx            # View mode components
+│       ├── hooks/
+│       │   ├── use-chat.ts           # Chat state management
+│       │   ├── use-debug-session.ts  # Debug session
+│       │   ├── use-database-viewer.ts # DB viewer
+│       │   └── use-file-content-stream.ts  # File streaming
+│       ├── utils/
+│       │   ├── handle-websocket-message.ts  # WS event parser
+│       │   ├── message-helpers.ts    # Message utilities
+│       │   ├── file-state-helpers.ts # File state
+│       │   ├── websocket-helpers.ts  # WS connection
+│       │   ├── tool-display.ts       # Tool output display
+│       │   ├── content-detector.ts   # Content type detection
+│       │   ├── deduplicate-messages.ts # Dedup logic
+│       │   └── project-stage-helpers.ts # Stage detection
+│       ├── contexts/
+│       │   └── rollback-context.tsx   # Rollback state
+│       └── mocks/
+│           ├── phase-timeline-mock.ts # Mock data
+│           └── file-mock.ts          # Mock files
+│
+├── components/
+│   ├── agent-selector.tsx            # Agent type picker
+│   ├── prompt-box.tsx                # Message input
+│   ├── header.tsx                    # App header
+│   ├── theme-toggle.tsx              # Dark/light toggle
+│   ├── ErrorBoundary.tsx             # Error boundary
+│   ├── browser-gate.tsx              # Browser compatibility
+│   ├── maintenance-page.tsx          # Maintenance screen
+│   ├── github-export-modal.tsx       # GitHub export
+│   ├── image-upload-button.tsx       # Image upload
+│   ├── image-attachment-preview.tsx   # Image preview
+│   ├── layout/
+│   │   └── app-layout.tsx            # Main layout
+│   ├── ui/                           # shadcn/ui primitives
+│   ├── primitives/                   # Custom primitives
+│   ├── shared/                       # Shared components
+│   ├── analytics/                    # Analytics components
+│   ├── icons/                        # Icon components
+│   ├── monaco-editor/                # Code editor
+│   ├── providers/                    # Context providers
+│   └── vault/                        # Vault components
+│
+├── contexts/
+│   ├── auth-context.tsx              # Authentication state
+│   ├── limits-context.tsx            # Usage limits
+│   ├── theme-context.tsx             # Theme management
+│   └── vault-context.tsx             # Vault state
+│
+├── hooks/
+│   ├── useAuthGuard.ts              # Auth guard hook
+│   ├── useApp.ts                    # Single app data
+│   ├── useApps.ts                   # App list data
+│   ├── use-profile.ts              # User profile
+│   ├── use-stats.ts                # Statistics
+│   ├── use-limits.ts               # Usage limits
+│   ├── use-analytics.ts            # Analytics data
+│   ├── use-vault.ts                # Vault operations
+│   ├── use-mobile.ts               # Mobile detection
+│   ├── use-auto-scroll.ts          # Auto-scroll
+│   ├── use-copy-to-clipboard.ts    # Copy to clipboard
+│   ├── use-drag-drop.ts            # Drag and drop
+│   ├── use-github-export.ts        # GitHub export
+│   ├── use-image-upload.ts         # Image upload
+│   ├── use-infinite-scroll.ts      # Infinite scroll
+│   ├── use-platform-status.ts      # Platform status
+│   ├── use-typewriter-placeholder.ts # Typewriter effect
+│   └── useSentryUser.ts            # Sentry user tracking
+│
+├── lib/
+│   ├── api-client.ts                # HTTP client
+│   ├── agent-types.ts               # Agent type definitions
+│   ├── query-client.ts              # TanStack Query config
+│   ├── query-keys.ts                # Query key definitions
+│   ├── app-events.ts                # App event bus
+│   ├── chat-api.ts                  # Chat API helpers
+│   ├── cloudflare-connect.ts        # CF connection
+│   ├── vault-crypto.ts              # Vault encryption
+│   ├── utils.ts                     # General utilities
+│   └── constants/
+│       └── workflow-tabs.ts         # Workflow tab config
+│
+├── features/
+│   ├── index.ts                     # Feature registry
+│   ├── app/                         # App features
+│   ├── core/                        # Core features
+│   ├── general/                     # General features
+│   └── presentation/               # Presentation features
+│
+├── utils/
+│   ├── analytics.ts                 # Analytics tracking
+│   ├── cloudflare-gate.ts          # CF gate check
+│   ├── file-helpers.ts             # File utilities
+│   ├── id-generator.ts             # ID generation
+│   ├── logger.ts                   # Logging
+│   ├── markdown-export.ts          # Markdown export
+│   ├── model-helpers.ts            # Model utilities
+│   ├── screenshot.ts               # Screenshot capture
+│   ├── sentry.ts                   # Sentry config
+│   ├── string.ts                   # String utilities
+│   ├── usage-limit-checker.tsx     # Limit checking
+│   └── ndjson-parser/
+│       ├── ndjson-parser.ts        # NDJSON parsing
+│       └── ndjson-parser.test.ts   # Parser tests
+│
+└── assets/                         # Static assets
 ```
 
 ---
 
-## MAIN BOT/
-
-Production deployment of OXYGENT Telegram bot with full feature set.
-
-| File | Lines | Purpose | Key Exports |
-|------|-------|---------|-------------|
-| `main.py` | 459 | Entry point, Telegram handlers, admin panel | Command/callback handlers, bot setup |
-| `config.py` | 210 | Environment variables, AI models, messages | `BOT_TOKEN`, `ADMIN_IDS`, `OPENCODE_ZEN_*`, `SYSTEM_PROMPT` |
-| `database.py` | 1348 | PostgreSQL operations, connection pooling | `_POOL`, `get_user()`, `add_user()`, `save_payment()` |
-| `agent_engine.py` | 664 | Hermes-style AI agent loop | `agent_build()` |
-| `coding_tools.py` | 775 | 7-tool sandbox for code/file operations | `read_file()`, `write_file()`, `terminal()`, `web_search()` |
-| `payments.py` | 101 | Telegram Stars payment processing | `STAR_PACKAGES`, `get_buy_keyboard()`, `handle_successful_payment()` |
-| `memory_system.py` | 509 | Triple-layer memory (file + DB + unified) | `HermesMemory`, `MemoryDatabase`, `OxygentMemory`, `get_memory()` |
-| `context_engine.py` | 159 | Token tracking, auto-compaction | `ContextEngine` |
-| `api_server.py` | 833 | FastAPI Mini App backend | All `/api/*` endpoints |
-| `cloudflare_deploy.py` | 349 | CF Pages/Workers deployment | `deploy_to_pages()`, `deploy_to_workers()` |
-| `cloudflare_oauth.py` | 345 | Per-user CF OAuth token management | `cf_api_get()`, `cf_api_post()`, `get_cloudflare_account()` |
-| `error_fix.py` | 232 | AI-powered error detection and auto-repair | `build_fix_prompt()`, `analyze_error()` |
-| `project_analyzer.py` | 330 | Auto-detect project type from prompt | `analyze_prompt()` |
-| `deploy_vps.py` | 186 | SSH-based VPS deployment | `connect_vps()`, `deploy()` |
-| `requirements.txt` | 12 | Python dependencies | `python-telegram-bot`, `psycopg2`, `aiohttp`, `fastapi`, `pyjwt` |
-| `templates/cloudflare_callback.html` | - | Cloudflare OAuth callback page | - |
-| `.env` | - | Environment variables (not in git) | - |
-| `.env.example` | 26 | Example environment config | - |
-| `SECURITY.md` | 91 | Security documentation | - |
-
-### main.py — Handler Structure
+## worker/ (Cloudflare Worker Backend)
 
 ```
-main.py (459 lines)
-├── Imports (telegram, config, database)
-├── Constants (MINI_APP_URL, MAINTENANCE_MSG)
-├── Helper Functions
-│   ├── is_admin(user_id) → bool
-│   ├── is_maintenance_mode() → bool
-│   ├── notify_admins(bot, text)
-│   └── _entities_to_list(entities)
-├── Command Handlers
-│   ├── /start — Welcome message, Mini App button
-│   ├── /admin — Admin panel (maintenance toggle, stats)
-│   ├── /selftest — Health check
-│   └── (future: /menu, /create, /status, /voice, etc.)
-├── Callback Handlers
-│   ├── admin_toggle_maintenance — Toggle maintenance mode
-│   ├── admin_stats — Show bot statistics
-│   └── (future: session, payment callbacks)
-├── Message Handlers
-│   └── Non-command messages → maintenance check
-├── Bot Setup
-│   └── Application builder, handler registration
-└── Main
-    └── Application.run_polling()
-```
-
-### api_server.py — Endpoint Structure
-
-```
-api_server.py (833 lines)
-├── Config (BOT_TOKEN, JWT_SECRET, OPENCODE_ZEN_*)
-├── Middleware
-│   ├── CORS (allow all origins for dev)
-│   └── MaintenanceMiddleware (blocks non-admins when maintenance ON)
-├── Auth Endpoints
-│   ├── POST /api/auth/telegram — Verify initData, return JWT
-│   └── GET /api/user/me — Get current user profile
-├── Project Endpoints
-│   ├── GET /api/projects — List user's projects
-│   ├── POST /api/projects — Create new project
-│   ├── GET /api/projects/:id — Get project details
-│   └── DELETE /api/projects/:id — Delete project
-├── AI Endpoints
-│   ├── POST /api/chat — Send message to AI
-│   └── GET /api/limits — Get daily limits
-├── Deployment Endpoints
-│   ├── POST /api/deploy — Deploy to Cloudflare
-│   ├── POST /api/fix — AI error analysis
-│   ├── POST /api/fix/apply — Apply fixes and redeploy
-│   └── GET /api/deployments — List deployed projects
-├── Cloudflare OAuth Endpoints
-│   ├── GET /api/cloudflare/status — Check connection
-│   ├── GET /api/cloudflare/auth-url — Get auth URL
-│   ├── GET /api/cloudflare/callback — Handle callback
-│   └── DELETE /api/cloudflare/disconnect — Disconnect account
-└── Main
-    └── uvicorn.run()
-```
-
----
-
-## vibesdk/
-
-Cloudflare Workers SDK for the OXYCODE platform.
-
-```
-vibesdk/
-├── worker/                    # Main worker code
-│   ├── utils/                 # Utility modules
-│   │   ├── authUtils.ts       # Authentication
-│   │   ├── cryptoUtils.ts     # Encryption
-│   │   ├── deployToCf.ts      # CF deployment
-│   │   ├── dispatcherUtils.ts # Request dispatching
-│   │   ├── encoding.ts        # Encoding utils
-│   │   ├── envs.ts            # Environment config
-│   │   ├── ErrorHandling.ts   # Error handling
-│   │   ├── githubUtils.ts     # GitHub integration
-│   │   ├── idGenerator.ts     # ID generation
-│   │   ├── images.ts          # Image processing
-│   │   ├── inputValidator.ts  # Input validation
-│   │   ├── jwtUtils.ts        # JWT handling
-│   │   ├── oauthCookie.ts     # OAuth cookies
-│   │   ├── ownerPreviewToken.ts
-│   │   ├── passwordService.ts # Password hashing
-│   │   ├── pathUtils.ts       # Path utilities
-│   │   ├── screenshot-security.ts
-│   │   ├── spacePreviewToken.ts
-│   │   ├── stateSigning.ts    # State signing
-│   │   ├── timeFormatter.ts   # Time formatting
-│   │   ├── tokenEncryption.ts # Token encryption
-│   │   ├── urls.ts            # URL utilities
-│   │   ├── validationUtils.ts # Validation
-│   │   └── wsTicketManager.ts # WebSocket tickets
-│   ├── types/                 # TypeScript types
-│   │   ├── appenv.ts          # App environment
-│   │   ├── auth-types.ts      # Auth types
-│   │   ├── env.d.ts           # Environment types
-│   │   ├── image-attachment.ts
-│   │   └── secretsTemplates.ts
-│   └── services/              # Service modules
-│       └── static-analysis/   # Code analysis
-├── container/                 # Container management
-│   ├── cli-tools.ts
-│   ├── process-monitor.ts
-│   ├── storage.ts
-│   └── types.ts
-├── packages/                  # Shared packages
-│   └── artifacts-viewer/      # Artifact viewer UI
-├── scripts/                   # Build/deploy scripts
-│   ├── deploy.ts
-│   ├── dev-browser-sidecar.ts
-│   ├── setup.ts
-│   └── undeploy.ts
-├── migrations/                # Database migrations
-├── docs/                      # API documentation
-├── debug-tools/               # Debug utilities
-├── package.json
-├── drizzle.config.local.ts
-└── drizzle.config.remote.ts
+worker/
+├── index.ts                        # Worker entry, request router
+├── app.ts                          # Hono application setup
+│
+├── api/
+│   ├── routes/
+│   │   ├── index.ts                # Route registration
+│   │   ├── authRoutes.ts           # Auth endpoints
+│   │   ├── appRoutes.ts            # App management
+│   │   ├── userRoutes.ts           # User endpoints
+│   │   ├── codegenRoutes.ts        # Agent/codegen
+│   │   ├── modelConfigRoutes.ts    # Model config
+│   │   ├── modelProviderRoutes.ts  # Provider keys
+│   │   ├── githubExporterRoutes.ts # GitHub export
+│   │   ├── statsRoutes.ts          # Statistics
+│   │   ├── analyticsRoutes.ts      # Analytics
+│   │   ├── cloudflareConnectRoutes.ts  # CF OAuth
+│   │   ├── cloudflareAccountRoutes.ts  # CF accounts
+│   │   ├── limitsRoutes.ts         # Usage limits
+│   │   ├── statusRoutes.ts         # Platform status
+│   │   ├── capabilitiesRoutes.ts   # Capabilities
+│   │   ├── sentryRoutes.ts         # Sentry tunnel
+│   │   ├── ticketRoutes.ts         # WebSocket tickets
+│   │   ├── imagesRoutes.ts         # Screenshots
+│   │   ├── secretsRoutes.ts        # Secrets mgmt
+│   │   └── userSecretsRoutes.ts    # User secrets
+│   ├── controllers/
+│   │   ├── user/                   # User controller
+│   │   ├── user-secrets/           # User secrets controller
+│   │   ├── ticket/                 # Ticket controller
+│   │   ├── status/                 # Status controller
+│   │   ├── stats/                  # Stats controller
+│   │   ├── sentry/                 # Sentry controller
+│   │   └── secrets/                # Secrets controller
+│   ├── handlers/
+│   │   ├── git-protocol.ts         # Git protocol
+│   │   ├── git-cache.ts            # Git caching
+│   │   ├── space-preview.ts        # Space preview
+│   │   └── space-preview-ratelimit.test.ts
+│   ├── types/
+│   │   └── route-context.ts        # Route context types
+│   ├── websocketTypes.ts           # WebSocket types
+│   ├── responses.ts                # Response helpers
+│   └── honoAdapter.ts             # Hono adapter
+│
+├── agents/
+│   ├── index.ts                    # Agent exports
+│   ├── core/
+│   │   └── codingAgent.ts          # Code generation agent
+│   └── think/
+│       └── ThinkAgent.ts           # Agentic think loop
+│
+├── database/
+│   ├── index.ts                    # Database exports
+│   ├── schema.ts                   # D1 schema (Drizzle)
+│   ├── database.ts                 # Database connection
+│   ├── types.ts                    # Database types
+│   └── services/
+│       ├── BaseService.ts          # Base service class
+│       ├── AppService.ts           # App management
+│       ├── UserService.ts          # User management
+│       ├── SessionService.ts       # Session tracking
+│       ├── ModelConfigService.ts   # Model config
+│       ├── ModelProvidersService.ts # Provider keys
+│       ├── ApiKeyService.ts        # API keys
+│       ├── AnalyticsService.ts     # Analytics
+│       └── AuthService.ts          # Authentication
+│
+├── services/
+│   ├── rate-limit/
+│   │   ├── rateLimits.ts           # Rate limit service
+│   │   ├── DORateLimitStore.ts     # DO storage
+│   │   ├── config.ts               # Rate limit config
+│   │   └── errors.ts               # Rate limit errors
+│   ├── csrf/
+│   │   └── CsrfService.ts          # CSRF protection
+│   ├── aigateway-proxy/
+│   │   └── controller.ts           # AI Gateway proxy
+│   ├── sandbox/
+│   │   ├── request-handler.ts      # Sandbox routing
+│   │   └── sandboxSdkClient.ts     # Sandbox SDK
+│   └── secrets/
+│       └── UserSecretsStore.ts     # User secrets DO
+│
+├── middleware/
+│   ├── auth/
+│   │   ├── auth.ts                 # Auth middleware
+│   │   ├── routeAuth.ts            # Route auth config
+│   │   └── ticketAuth.ts           # Ticket auth
+│   └── security/
+│       └── websocket.ts            # WebSocket security
+│
+├── config/
+│   ├── index.ts                    # Config exports
+│   └── security.ts                 # Security config
+│
+├── logger/
+│   ├── index.ts                    # Logger exports
+│   ├── core.ts                     # Core logger
+│   └── types.ts                    # Logger types
+│
+├── observability/
+│   └── sentry.ts                   # Sentry integration
+│
+├── polyfills/
+│   └── safe-buffer.ts              # Buffer polyfill
+│
+├── types/
+│   ├── appenv.ts                   # App environment
+│   ├── auth-types.ts               # Auth types
+│   ├── env.d.ts                    # Environment types
+│   ├── image-attachment.ts         # Image types
+│   └── secretsTemplates.ts         # Secret templates
+│
+└── utils/
+    ├── authUtils.ts                # Auth utilities
+    ├── cryptoUtils.ts              # Crypto utilities
+    ├── jwtUtils.ts                 # JWT utilities
+    ├── urls.ts                     # URL utilities
+    ├── envs.ts                     # Environment detection
+    ├── pathUtils.ts                # Path utilities
+    ├── idGenerator.ts              # ID generation
+    ├── githubUtils.ts              # GitHub utilities
+    ├── deployToCf.ts               # CF deployment
+    ├── dispatcherUtils.ts          # Dispatcher utils
+    ├── encoding.ts                 # Encoding utils
+    ├── ErrorHandling.ts            # Error handling
+    ├── images.ts                   # Image processing
+    ├── inputValidator.ts           # Input validation
+    ├── oauthCookie.ts              # OAuth cookies
+    ├── ownerPreviewToken.ts        # Owner preview tokens
+    ├── passwordService.ts          # Password hashing
+    ├── screenshot-security.ts      # Screenshot security
+    ├── spacePreviewToken.ts        # Space preview tokens
+    ├── stateSigning.ts             # State signing
+    ├── timeFormatter.ts            # Time formatting
+    ├── tokenEncryption.ts          # Token encryption
+    ├── validationUtils.ts          # Validation
+    └── wsTicketManager.ts          # WebSocket tickets
 ```
 
 ---
 
-## docs/
-
-Documentation directory.
+## shared/ (Shared Code)
 
 ```
-docs/
-└── CODEMAPS/
-    ├── ARCHITECTURE.md    # System overview, data flow, diagrams
-    ├── MODULES.md         # Module docs, APIs, dependencies
-    └── FILES.md           # This file
+shared/
+├── types/
+│   └── errors.ts                   # Error types (SecurityError, etc.)
+└── constants/
+    └── limits.ts                   # Limit constants
 ```
 
 ---
 
-## Data Directories (Runtime)
+## MAIN BOT/ (Legacy Python)
 
-Created at runtime, not in git.
-
-| Path | Purpose | Format |
-|------|---------|--------|
-| `/tmp/oxygent_sandbox/{uid}/{sid}/` | Per-user session sandboxes | Files |
-| `./memory/` | HermesMemory file storage | `{telegram_id}/MEMORY.md`, `USER.md` |
-| `./data/` | SQLite databases | `memory.db`, `tools.db` |
-| `./.agent/` | Agent working state | Various |
-| `./logs/` | Application logs | `.log` files |
+```
+MAIN BOT/
+├── main.py                         # Telegram bot entry
+├── config.py                       # Configuration
+├── database.py                     # PostgreSQL operations
+├── agent_engine.py                 # Hermes-style agent loop
+├── coding_tools.py                 # 7-tool sandbox
+├── payments.py                     # Telegram Stars payments
+├── memory_system.py                # Triple-layer memory
+├── context_engine.py               # Token tracking
+├── api_server.py                   # FastAPI backend
+├── cloudflare_deploy.py            # CF Pages/Workers deploy
+├── cloudflare_oauth.py             # Per-user CF OAuth
+├── error_fix.py                    # AI error detection
+├── project_analyzer.py             # Project type detection
+├── deploy_vps.py                   # SSH VPS deployment
+├── requirements.txt                # Python dependencies
+├── .env.example                    # Environment template
+├── SECURITY.md                     # Security docs
+└── templates/
+    └── cloudflare_callback.html    # OAuth callback page
+```
 
 ---
 
@@ -200,12 +359,21 @@ Created at runtime, not in git.
 
 | File | Location | Purpose |
 |------|----------|---------|
-| `.gitignore` | Project root | Git ignore rules |
-| `.env` | Each bot | Environment variables (not in git) |
-| `.env.example` | MAIN BOT | Example environment config |
-| `requirements.txt` | Each bot | Python package dependencies |
-| `SECURITY.md` | MAIN BOT | Security documentation |
-| `CLAUDE.md` | Project root | Claude Code session instructions |
+| `package.json` | Root | Node.js dependencies |
+| `vite.config.ts` | Root | Vite build configuration |
+| `tsconfig.json` | Root | TypeScript config |
+| `tsconfig.app.json` | Root | App-specific TS config |
+| `tsconfig.node.json` | Root | Node-specific TS config |
+| `eslint.config.js` | Root | ESLint configuration |
+| `vitest.config.ts` | Root | Test configuration |
+| `knip.json` | Root | Unused code detection |
+| `components.json` | Root | shadcn/ui config |
+| `.editorconfig` | Root | Editor settings |
+| `bunfig.toml` | Root | Bun configuration |
+| `wrangler.toml` | Root | Cloudflare Workers config |
+| `.gitignore` | Root | Git ignore rules |
+| `.env.production` | Root | Production env vars |
+| `vercel.json` | Root | Vercel deployment config |
 
 ---
 
@@ -213,22 +381,29 @@ Created at runtime, not in git.
 
 | What | Where |
 |------|-------|
-| Telegram bot entry | `MAIN BOT/main.py` |
-| Mini App API backend | `MAIN BOT/api_server.py` |
-| All config | `*/config.py` |
-| Database layer | `*/database.py` |
-| AI agent loop | `*/agent_engine.py` |
-| Tool sandbox | `*/coding_tools.py` |
-| Payment system | `*/payments.py` |
-| Memory (file) | `*/memory_system.py` → `./memory/` |
-| Memory (SQLite) | `*/memory_system.py` → `./data/memory.db` |
-| Token tracking | `MAIN BOT/context_engine.py` |
-| CF OAuth | `MAIN BOT/cloudflare_oauth.py` |
-| CF Deployment | `MAIN BOT/cloudflare_deploy.py` |
-| Error fixing | `MAIN BOT/error_fix.py` |
-| Project detection | `MAIN BOT/project_analyzer.py` |
-| VPS deployment | `MAIN BOT/deploy_vps.py` |
-| Cloudflare Workers | `vibesdk/` |
+| Frontend entry | `src/main.tsx` |
+| Root component | `src/App.tsx` |
+| Route definitions | `src/routes.tsx` |
+| API types | `src/api-types.ts` |
+| HTTP client | `src/lib/api-client.ts` |
+| Query keys | `src/lib/query-keys.ts` |
+| Chat interface | `src/routes/chat/chat.tsx` |
+| Chat state | `src/routes/chat/hooks/use-chat.ts` |
+| WebSocket handler | `src/routes/chat/utils/handle-websocket-message.ts` |
+| Auth context | `src/contexts/auth-context.tsx` |
+| Agent types | `src/lib/agent-types.ts` |
+| Worker entry | `worker/index.ts` |
+| Hono app | `worker/app.ts` |
+| Route setup | `worker/api/routes/index.ts` |
+| D1 schema | `worker/database/schema.ts` |
+| Code agent | `worker/agents/core/codingAgent.ts` |
+| Think agent | `worker/agents/think/ThinkAgent.ts` |
+| Rate limiting | `worker/services/rate-limit/rateLimits.ts` |
+| CSRF | `worker/services/csrf/CsrfService.ts` |
+| Shared errors | `shared/types/errors.ts` |
+| Shared limits | `shared/constants/limits.ts` |
+| Python bot entry | `MAIN BOT/main.py` |
+| Python agent | `MAIN BOT/agent_engine.py` |
 | Documentation | `docs/CODEMAPS/` |
 
 ---

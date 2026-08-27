@@ -181,9 +181,76 @@ const DEFAULT_AGENT_CONFIG: AgentConfig = {
     },
 };
 
-export const AGENT_CONFIG: AgentConfig = env.PLATFORM_MODEL_PROVIDERS 
-    ? PLATFORM_AGENT_CONFIG 
-    : DEFAULT_AGENT_CONFIG;
+//======================================================================================
+// OpenCode Zen Free Models Config
+//======================================================================================
+/* Uses OpenCode Zen free models when OPENCODE_API_KEY is set */
+const OPENCODE_AGENT_CONFIG: AgentConfig = {
+    ...COMMON_AGENT_CONFIGS,
+    templateSelection: {
+        name: AIModels.OPENCODE_NEMOTRON_LITE_FREE,
+        max_tokens: 2000,
+        fallbackModel: AIModels.OPENCODE_MIMO_FREE,
+        temperature: 0.6,
+    },
+    blueprint: {
+        name: AIModels.OPENCODE_MIMO_FREE,
+        reasoning_effort: undefined,
+        max_tokens: 64000,
+        fallbackModel: AIModels.OPENCODE_HY3_FREE,
+        temperature: 1,
+    },
+    projectSetup: {
+        name: AIModels.OPENCODE_HY3_FREE,
+        ...SHARED_IMPLEMENTATION_CONFIG,
+    },
+    phaseGeneration: {
+        name: AIModels.OPENCODE_MIMO_FREE,
+        ...SHARED_IMPLEMENTATION_CONFIG,
+    },
+    firstPhaseImplementation: {
+        name: AIModels.OPENCODE_HY3_FREE,
+        ...SHARED_IMPLEMENTATION_CONFIG,
+    },
+    phaseImplementation: {
+        name: AIModels.OPENCODE_HY3_FREE,
+        ...SHARED_IMPLEMENTATION_CONFIG,
+    },
+    conversationalResponse: {
+        name: AIModels.OPENCODE_NEMOTRON_LITE_FREE,
+        reasoning_effort: undefined,
+        max_tokens: 4000,
+        temperature: 0,
+        fallbackModel: AIModels.OPENCODE_MIMO_FREE,
+    },
+    deepDebugger: {
+        name: AIModels.OPENCODE_NEMOTRON_FREE,
+        reasoning_effort: undefined,
+        max_tokens: 8000,
+        temperature: 1,
+        fallbackModel: AIModels.OPENCODE_HY3_FREE,
+    },
+    fileRegeneration: {
+        name: AIModels.OPENCODE_BIG_PICKLE,
+        reasoning_effort: undefined,
+        max_tokens: 32000,
+        temperature: 1,
+        fallbackModel: AIModels.OPENCODE_MIMO_FREE,
+    },
+    agenticProjectBuilder: {
+        name: AIModels.OPENCODE_HY3_FREE,
+        reasoning_effort: undefined,
+        max_tokens: 8000,
+        temperature: 1,
+        fallbackModel: AIModels.OPENCODE_MIMO_FREE,
+    },
+};
+
+export const AGENT_CONFIG: AgentConfig = env.OPENCODE_API_KEY
+    ? OPENCODE_AGENT_CONFIG
+    : env.PLATFORM_MODEL_PROVIDERS 
+        ? PLATFORM_AGENT_CONFIG 
+        : DEFAULT_AGENT_CONFIG;
 
 
 export const AGENT_CONSTRAINTS: Map<AgentActionKey, AgentConstraintConfig> = new Map([

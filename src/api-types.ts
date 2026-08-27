@@ -165,6 +165,15 @@ export function getBehaviorTypeForProject(projectType?: ProjectType): BehaviorTy
 
 export const DEFAULT_FEATURE_DEFINITIONS: FeatureDefinition[] = [];
 
+// Agent session creation args
+export interface CodeGenArgs {
+  query: string;
+  projectType?: string;
+  behaviorType?: string;
+  agentType?: string;
+  images?: ImageAttachment[];
+}
+
 // Image attachment constants
 export const SUPPORTED_IMAGE_TYPES = SUPPORTED_IMAGE_MIME_TYPES;
 

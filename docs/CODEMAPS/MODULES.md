@@ -1,484 +1,640 @@
 # Modules Codemap
 
-**Last Updated:** 2026-08-21
+**Last Updated:** 2026-08-27
 
 ## Module Dependency Graph
 
 ```
-                         config.py
-                        /    |    \
-                       /     |     \
-              database.py  agent_engine.py  error_fix.py
-                 |           /        \           |
-             payments.py  coding_tools.py  cloudflare_deploy.py
-                          (standalone)          |
-                                         cloudflare_oauth.py
-                                               |
-                                          database.py
-
-  MAIN BOT only:
-  - api_server.py
-  - cloudflare_deploy.py
-  - cloudflare_oauth.py
-  - error_fix.py
-  - project_analyzer.py
-  - deploy_vps.py
+                          shared/
+                     ┌───────┴───────┐
+                     │ types/errors  │
+                     │ constants/    │
+                     └───────┬───────┘
+                             │
+         ┌───────────────────┼───────────────────┐
+         │                   │                   │
+         ▼                   ▼                   ▼
+   ┌──────────┐       ┌──────────┐       ┌──────────┐
+   │  src/    │       │ worker/  │       │ MAIN BOT/│
+   │ (React)  │       │ (CF Work)│       │ (Python) │
+   └────┬─────┘       └────┬─────┘       └────┬─────┘
+        │                  │                  │
+        │                  │                  │
+   Frontend            Backend             Legacy
 ```
 
 ---
 
-## 1. config.py
+## 1. Frontend Modules (src/)
 
-**Purpose:** Central configuration hub. Loads all environment variables, defines AI model endpoints, bot messages, and system limits.
+### 1.1 Application Core
 
-**Location:** `MAIN BOT/config.py`
+#### src/main.tsx
+**Purpose:** React entry point. Creates browser router and renders app.
 
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `BOT_TOKEN` | `str` | Telegram Bot API token |
-| `ADMIN_IDS` | `list[int]` | Admin user IDs (default: 8972944701, 7371674958) |
-| `AGENT_NAME` | `str` | Bot display name ("OXYCODE") |
-| `OPENCODE_ZEN_BASE_URL` | `str` | AI API base URL |
-| `OPENCODE_ZEN_MODEL` | `str` | Primary AI model (default: mimo-v2.5-free) |
-| `OPENCODE_ZEN_FALLBACKS` | `list[str]` | Fallback models for rate-limit rotation |
-| `DATABASE_URL` | `str` | PostgreSQL connection string |
-| `WELCOME_MESSAGE` | `str` | HTML-formatted welcome message |
-| `HELP_MESSAGE` | `str` | HTML-formatted help message |
-| `SYSTEM_PROMPT` | `str` | Full AI personality and behavior rules |
-| `MAX_SESSIONS` | `int` | Max code sessions per user (5) |
-| `REFERRAL_BONUS` | `int` | Credits for referral (20) |
-| `DEFAULT_DAILY_LIMIT` | `int` | Free tier daily limit (20) |
-| `MAINTENANCE_MODE` | `bool` | Global maintenance toggle |
+**Location:** `src/main.tsx`
 
-**Dependencies:** `os`, `dotenv`
+**Key Exports:** None (entry point)
 
-**AI Models (Free Tier):**
-- Primary: `mimo-v2.5-free`
-- Fallbacks: `deepseek-v4-flash-free`, `hy3-free`, `nemotron-3.5-lightning-free`, `nemotron-3-ultra-free`, `laguna-s-2.1-free`
+**Dependencies:** React Router, App component
 
 ---
 
-## 2. database.py
+#### src/App.tsx
+**Purpose:** Root application component with provider hierarchy.
 
-**Purpose:** PostgreSQL database layer using psycopg2 with connection pooling. Handles all persistent storage for users, sessions, payments, channels, deployments, and Cloudflare tokens.
+**Location:** `src/App.tsx`
 
-**Location:** `MAIN BOT/database.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `_POOL` | `SimpleConnectionPool` | Connection pool (5-50 connections) |
-| `get_db()` | `function` | Get pooled database connection |
-| `add_user(user_id, username, first_name)` | `function` | Add or update user |
-| `get_user(user_id)` | `function` | Get user by Telegram ID |
-| `update_voice_pref(user_id, enabled, gender)` | `function` | Set voice preferences |
-| `get_voice_pref(user_id)` | `function` | Get voice preferences |
-| `get_maintenance_mode()` | `function` | Check maintenance status |
-| `set_maintenance_mode(enabled)` | `function` | Toggle maintenance mode |
-| `create_session(user_id, name, type)` | `function` | Create code session |
-| `get_user_sessions(user_id)` | `function` | Get user's sessions |
-| `payment_exists(charge_id)` | `function` | Idempotency check |
-| `save_payment(...)` | `function` | Record Telegram Stars payment |
-| `get_setting(key)` | `function` | Get admin setting |
-| `set_setting(key, value)` | `function` | Set admin setting |
-| `get_user_profile(user_id)` | `function` | Get full user profile (single query) |
-| `get_bot_stats()` | `function` | Get comprehensive bot statistics |
-| `add_deployment(...)` | `function` | Record deployment |
-| `get_user_deployments(uid)` | `function` | Get user's deployments |
-
-**Database Tables:**
-| Table | Purpose |
-|-------|---------|
-| `users` | User accounts, limits, voice prefs, referral codes |
-| `channels` | Force-join Telegram channels |
-| `user_states` | Conversation flow states |
-| `code_sessions` | Code creation sessions with context |
-| `payments` | Telegram Stars transactions |
-| `broadcasts` | Broadcast message log |
-| `settings` | Admin-configurable limits |
-| `workers` | Cloudflare Worker hosting info |
-| `deployments` | Deployed projects (Vercel/Cloudflare) |
-| `projects` | Mini App projects |
-| `daily_messages` | Daily message tracking for Mini App |
-| `cloudflare_accounts` | Per-user Cloudflare OAuth tokens |
-
-**Dependencies:** `psycopg2`, `config.py`
-
-**Safety:**
-- Refuses to start without valid PostgreSQL URL (no SQLite fallback)
-- Schema isolation via `OXYGENT_SCHEMA` env var
-- All user_id columns are BIGINT (Telegram 64-bit IDs)
-- Connection pool with automatic validation and recycling
-
----
-
-## 3. agent_engine.py
-
-**Purpose:** Hermes-style autonomous coding agent. Implements the THINK→ACT→OBSERVE loop with tool calling, model rotation, and sandboxed execution.
-
-**Location:** `MAIN BOT/agent_engine.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `agent_build(uid, sid, user_message, ...)` | `async function` | Main entry: full agent build cycle |
-
-**Agent Build Flow:**
+**Provider Stack (top to bottom):**
 ```
-agent_build(uid, sid, message)
-  → Create sandbox: /tmp/oxygent_sandbox/{uid}/{sid}/
-  → Load conversation context
-  → Build system prompt with tool definitions
-  → Enter agent loop (max 8 turns):
-      → Call OpenCode Zen API
-      → Parse tool_calls from response
-      → Execute tool in sandbox
-      → Feed result back as role:"tool" message
-  → Collect all files from sandbox
-  → Return {ok, files, summary, session_name}
+ErrorBoundary
+  → GlobalErrorCatcher
+    → PersistQueryClientProvider (TanStack Query)
+      → ThemeProvider
+        → AuthProvider
+          → LimitsProvider
+            → ToastProvider (Kumo)
+              → FeatureProvider
+                → BrowserGate
+                  → AppInner (layout + Outlet)
 ```
 
-**Model Rotation:**
-```
-Primary (mimo-v2.5-free)
-  → 429/502? → Backoff 2s → Try next fallback
-  → deepseek-v4-flash-free
-  → hy3-free
-  → nemotron-3.5-lightning-free
-  → nemotron-3-ultra-free
-  → laguna-s-2.1-free
-```
+**Key Features:**
+- Maintenance mode detection (shows MaintenancePage for non-admins)
+- Global error catching (uncaught errors, unhandled rejections)
+- Persistent query client with offline support
 
-**Safety Features:**
-- Path jail prevents sandbox escapes (no ".." or absolute paths)
-- Per-user asyncio.Lock serializes builds
-- Blocked commands: rm -rf, mkfs, dd, shutdown, pip install, curl, wget
-- Approval required for: write_file, patch_file, terminal, execute_code
-
-**Dependencies:** `config.py`, `coding_tools.py`
+**Dependencies:** auth-context, limits-context, theme-context, features, query-client
 
 ---
 
-## 4. coding_tools.py
+#### src/routes.tsx
+**Purpose:** Route definitions for React Router.
 
-**Purpose:** 7-tool sandbox for code execution, file operations, and web search. All operations are isolated to the sandbox directory.
+**Location:** `src/routes.tsx`
 
-**Location:** `MAIN BOT/coding_tools.py`
+**Routes:**
+| Path | Component | Auth Required |
+|------|-----------|---------------|
+| `/` | Home | No |
+| `/profile` | Settings | Yes |
+| `/chat/:chatId` | Chat | Yes |
+| `/settings` | Redirect to /profile | No |
+
+**Dependencies:** App, Home, Chat, Settings, ProtectedRoute
+
+---
+
+### 1.2 API Layer
+
+#### src/api-types.ts
+**Purpose:** TypeScript types for all frontend-backend communication.
+
+**Location:** `src/api-types.ts`
+
+**Key Types:**
+| Type | Purpose |
+|------|---------|
+| `ImageAttachment` | Image upload data |
+| `AuthUser` | Authenticated user info |
+| `SessionResponse` | Auth session response |
+| `CodeGenArgs` | Agent session creation args |
+| `FileType` | Generated file metadata |
+| `AgentState` | Agent UI state |
+| `BehaviorType` | Agent behavior mode |
+| `WebSocketMessage` | WebSocket event format |
+| `RateLimitError` | Rate limit error data |
+| `SecurityError` | Security violation error |
+
+**Constants:**
+- `MAX_AGENT_QUERY_LENGTH` (10000)
+- `MAX_IMAGE_SIZE_BYTES` (10MB)
+- `MAX_IMAGES_PER_MESSAGE` (4)
+- `SUPPORTED_IMAGE_MIME_TYPES` (png, jpeg, gif, webp)
+
+---
+
+#### src/lib/api-client.ts
+**Purpose:** Unified HTTP client for all worker API calls.
+
+**Location:** `src/lib/api-client.ts`
+
+**Key Features:**
+- Automatic JWT auth via localStorage
+- CSRF token management (double-submit pattern)
+- 401 interception for auth modals
+- Rate limit error handling
+- Streaming response support
+
+**API Methods:**
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `getProfile()` | GET /api/auth/profile | Current user |
+| `getUserApps()` | GET /api/apps | User's apps |
+| `createApp()` | POST /api/apps | Create app |
+| `createAgentSession()` | POST /api/agent | Start agent (streaming) |
+| `connectToAgent()` | GET /api/agent/:id/connect | Reconnect to agent |
+| `deployPreview()` | POST /api/agent/:id/preview | Deploy app |
+| `getModelConfigs()` | GET /api/model-configs | AI model settings |
+| `connectCloudflare()` | POST /api/cloudflare/connect | CF OAuth |
+
+**Dependencies:** api-types, auth-context, sonner (toast)
+
+---
+
+#### src/lib/query-keys.ts
+**Purpose:** Centralized TanStack Query key definitions.
+
+**Location:** `src/lib/query-keys.ts`
+
+**Key Hierarchies:**
+```typescript
+queryKeys.apps.all        // All apps queries
+queryKeys.apps.detail(id) // Single app
+queryKeys.user.profile    // User profile
+queryKeys.user.stats      // User statistics
+queryKeys.modelConfigs    // Model configurations
+```
+
+---
+
+### 1.3 State Management
+
+#### src/contexts/auth-context.tsx
+**Purpose:** Authentication state and JWT token management.
+
+**Location:** `src/contexts/auth-context.tsx`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `read_file(filepath)` | `async function` | Read file content |
-| `write_file(filepath, content)` | `async function` | Create/overwrite files |
-| `search_files(pattern, path)` | `async function` | Search by filename or content |
-| `patch_file(filepath, old, new)` | `async function` | Find/replace edits |
-| `terminal(command, timeout)` | `async function` | Execute sandboxed shell commands |
-| `execute_code(code, language)` | `async function` | Run Python/JS snippets |
-| `web_search(query)` | `async function` | DuckDuckGo search |
+| `AuthProvider` | Component | Context provider |
+| `useAuth()` | Hook | Access auth state |
 
-**Safety Limits:**
-- `MAX_FILE_SIZE`: 10,000 bytes
-- `MAX_SEARCH_RESULTS`: 5
-- `MAX_PATCH_SIZE`: 5,000 bytes
-- `MAX_OUTPUT_LENGTH`: 2,000 chars
-- Blocked commands list enforced
+**Auth State:**
+- `user` — Current AuthUser or null
+- `isLoading` — Auth check in progress
+- `isMaintenance` — Maintenance mode active
+- `isAdmin` — Current user is admin
 
-**Dependencies:** None (standalone module)
+**Dependencies:** api-client, App.tsx
 
 ---
 
-## 5. payments.py
+#### src/contexts/limits-context.tsx
+**Purpose:** Usage limits and Cloudflare credits tracking.
 
-**Purpose:** Telegram Stars payment integration. Handles credit packages, invoice generation, and payment confirmation with idempotency.
-
-**Location:** `MAIN BOT/payments.py`
+**Location:** `src/contexts/limits-context.tsx`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `STAR_PACKAGES` | `list[dict]` | Available credit packages |
-| `get_buy_keyboard()` | `function` | Inline keyboard for package selection |
-| `create_invoice(package)` | `function` | Generate Telegram Stars invoice |
-| `handle_pre_checkout(query)` | `async function` | Validate & approve pre-checkout |
-| `handle_successful_payment(update)` | `async function` | Process completed payment |
-
-**Credit Packages:**
-| Stars | Credits | Price/Credit |
-|-------|---------|--------------|
-| 3 | 10 | 0.30 ⭐ |
-| 10 | 35 | 0.29 ⭐ |
-| 30 | 120 | 0.25 ⭐ |
-| 100 | 400 | 0.25 ⭐ |
-| 300 | 1500 | 0.20 ⭐ |
-
-**Dependencies:** `database.py`, `telegram` (LabeledPrice, InlineKeyboardButton)
+| `LimitsProvider` | Component | Context provider |
+| `useLimits()` | Hook | Access limits state |
 
 ---
 
-## 6. memory_system.py
+#### src/contexts/theme-context.tsx
+**Purpose:** Dark/light theme management.
 
-**Purpose:** Triple-layer memory system combining file-based storage (HermesMemory), PostgreSQL (MemoryDatabase), and unified interface (OxygentMemory).
-
-**Location:** `MAIN BOT/memory_system.py`
+**Location:** `src/contexts/theme-context.tsx`
 
 **Key Exports:**
 | Export | Type | Description |
 |--------|------|-------------|
-| `HermesMemory` | `class` | File-based memory (MEMORY.md, USER.md) |
-| `MemoryDatabase` | `class` | PostgreSQL-backed structured storage |
-| `OxygentMemory` | `class` | Unified interface combining both layers |
-| `get_memory(user_id)` | `function` | Factory for OxygentMemory instances |
-
-**HermesMemory (File-based):**
-- `MEMORY.md`: Agent's personal notes about the user (4000 char limit)
-- `USER.md`: User profile (2000 char limit)
-- Entry delimiter: `§` (Hermes style)
-
-**MemoryDatabase (PostgreSQL):**
-- Structured key-value storage
-- Conversation history tracking
-- Category-based organization
-
-**Auto-Detection:**
-- Names ("mera naam Rahul" → name: Rahul)
-- Favorites ("mujhe pizza pasand" → favourite: pizza)
-- Age, City, Occupation from natural language
-
-**Dependencies:** None (standalone module)
+| `ThemeProvider` | Component | Context provider |
+| `useTheme()` | Hook | Access theme state |
 
 ---
 
-## 7. context_engine.py
+### 1.4 Chat System
 
-**Purpose:** Token tracking and automatic context compaction. Monitors token usage and triggers summarization when approaching limits.
+#### src/routes/chat/chat.tsx
+**Purpose:** Main chat interface with agent interaction.
 
-**Location:** `MAIN BOT/context_engine.py`
+**Location:** `src/routes/chat/chat.tsx`
 
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `ContextEngine` | `class` | Token tracking and compaction engine |
+**Key Components:**
+- `ChatInput` — User message input with image upload
+- `Messages` — Conversation history display
+- `PreviewIframe` — Live app preview
+- `FileExplorer` — Generated file browser
+- `PhaseTimeline` — Agent progress display
+- `DeployPanel` — Deployment controls
+- `DebugPanel` — Debug session viewer
 
-**ContextEngine Methods:**
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `set_system_prompt(prompt)` | `None` | Set system prompt (max 3000 chars) |
-| `add_message(role, content)` | `None` | Add message, estimate tokens, auto-compact |
-| `_compact()` | `None` | Summarize old messages when >80% capacity |
-
-**Limits:**
-- `MAX_CONTEXT_TOKENS`: 4,000
-- `COMPACTION_THRESHOLD`: 0.8 (compact at 80%)
-- Token estimation: ~4 chars per token
-
-**Dependencies:** None (standalone module)
+**Dependencies:** use-chat, handle-websocket-message, api-client
 
 ---
 
-## 8. api_server.py (MAIN BOT only)
+#### src/routes/chat/hooks/use-chat.ts
+**Purpose:** Chat state management and WebSocket connection.
 
-**Purpose:** FastAPI backend for the Telegram Mini App web dashboard. Handles JWT authentication, project management, AI chat proxy, Cloudflare deployment, and error fixing.
+**Location:** `src/routes/chat/hooks/use-chat.ts`
 
-**Location:** `MAIN BOT/api_server.py`
+**Key Features:**
+- WebSocket connection management
+- Message history state
+- Agent state tracking (idle/thinking/generating/deploying)
+- File updates from agent
+- Deployment status
 
-**Key Endpoints:**
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/telegram` | Verify Telegram initData, return JWT |
-| GET | `/api/user/me` | Get current user profile |
-| GET | `/api/projects` | List user's projects |
-| POST | `/api/projects` | Create new project |
-| GET | `/api/projects/:id` | Get project details |
-| DELETE | `/api/projects/:id` | Delete project |
-| POST | `/api/chat` | Send message to AI, get response |
-| GET | `/api/limits` | Get user's daily limits |
-| POST | `/api/deploy` | Deploy to Cloudflare |
-| POST | `/api/fix` | AI error analysis |
-| POST | `/api/fix/apply` | Apply fixes and redeploy |
-| GET | `/api/deployments` | List deployed projects |
-| GET | `/api/cloudflare/status` | Check Cloudflare connection |
-| GET | `/api/cloudflare/auth-url` | Get OAuth authorization URL |
-| GET | `/api/cloudflare/callback` | Handle OAuth callback |
-| DELETE | `/api/cloudflare/disconnect` | Disconnect Cloudflare account |
-
-**Dependencies:** `fastapi`, `jwt`, `database.py`, `config.py`, `error_fix.py`, `cloudflare_oauth.py`, `cloudflare_deploy.py`
-
-**Auth Flow:**
-```
-Frontend sends Telegram initData
-  → Verify HMAC signature with BOT_TOKEN
-  → Extract user_id, username, first_name
-  → Generate JWT (7-day expiry)
-  → Return token + user profile
-```
-
-**Middleware:**
-- CORS (allow all origins for dev)
-- MaintenanceMiddleware (blocks non-admins when maintenance ON)
-
----
-
-## 10. cloudflare_oauth.py (MAIN BOT only)
-
-**Purpose:** Per-user Cloudflare account connection via OAuth. Each user connects their own CF account for deploying projects.
-
-**Location:** `MAIN BOT/cloudflare_oauth.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `get_cloudflare_account(telegram_id)` | `function` | Get user's CF account info |
-| `is_cloudflare_connected(telegram_id)` | `function` | Check if user has connected CF account |
-| `save_cloudflare_account(...)` | `function` | Save CF account credentials |
-| `remove_cloudflare_account(telegram_id)` | `function` | Disconnect CF account |
-| `cf_api_get(telegram_id, path)` | `function` | Authenticated CF API GET |
-| `cf_api_post(telegram_id, path, data)` | `function` | Authenticated CF API POST |
-| `cf_api_put(telegram_id, path, data)` | `function` | Authenticated CF API PUT |
-
-**OAuth Flow:**
-```
-User clicks "Connect Cloudflare"
-  → Redirect to CF OAuth authorization
-  → User authorizes
-  → CF redirects back with auth code
-  → Exchange code for API token
-  → Save to cloudflare_accounts table
-```
-
-**Required CF Token Scopes:**
-- Workers Scripts: Edit
-- Workers KV Storage: Edit
-- Workers R2 Storage: Edit
-- Cloudflare Pages: Edit
-- Zone Settings: Read
-- DNS: Read/Write
-
-**Database Table:** `cloudflare_accounts`
-- `user_id` (BIGINT, PK)
-- `api_token` (TEXT)
-- `account_id` (TEXT)
-- `account_name` (TEXT)
-- `email` (TEXT)
-- `connected_at` (TIMESTAMP)
-- `updated_at` (TIMESTAMP)
-
-**Dependencies:** `database.py`, `aiohttp`
-
----
-
-## 11. cloudflare_deploy.py (MAIN BOT only)
-
-**Purpose:** Deploy user projects to Cloudflare Pages and Workers using the user's connected Cloudflare account.
-
-**Location:** `MAIN BOT/cloudflare_deploy.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `deploy_to_pages(telegram_id, project_name, files)` | `async function` | Deploy static site to CF Pages |
-| `deploy_to_workers(telegram_id, script_name, script)` | `async function` | Deploy worker script |
-
-**Deployment Flow:**
-```
-Agent calls deploy_website/deploy_bot tool
-  → Get user's CF token from database
-  → Create zip of project files
-  → POST to CF Pages API or PUT to Workers API
-  → Return live URL
-```
-
-**Dependencies:** `cloudflare_oauth.py`
-
----
-
-## 12. error_fix.py (MAIN BOT only)
-
-**Purpose:** AI-powered error detection and auto-repair for deployed projects. Analyzes errors and generates fixes using OpenCode AI.
-
-**Location:** `MAIN BOT/error_fix.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `build_fix_prompt(error_type, error_message, project_files, ...)` | `function` | Build AI prompt for error analysis |
-| `analyze_error(...)` | `async function` | Get AI fix suggestion |
-| `apply_fix(...)` | `async function` | Apply fix and redeploy |
-
-**Error Types Handled:**
-- HTTP errors (404, 500, CORS)
-- JavaScript runtime errors
-- Build/compilation errors
-- Missing resources
-- Deployment failures
-
-**Dependencies:** `config.py`
-
----
-
-## 13. project_analyzer.py (MAIN BOT only)
-
-**Purpose:** Auto-detects project type, tech stack, and deployment target from user prompts using keyword matching (no AI call needed).
-
-**Location:** `MAIN BOT/project_analyzer.py`
-
-**Key Exports:**
-| Export | Type | Description |
-|--------|------|-------------|
-| `analyze_prompt(prompt)` | `function` | Analyze prompt → project metadata |
-
-**Return Shape:**
-```python
+**Returns:**
+```typescript
 {
-    "projectType": "website" | "telegram-bot" | "miniapp" | "api" | ...,
-    "techStack": ["react", "typescript", "tailwind"],
-    "deploymentTarget": "cloudflare-pages" | "cloudflare-workers" | "vercel" | "none",
-    "files": ["index.html", "style.css"],
-    "runCommand": "npm start",
-    "description": "One-line description"
+  messages: Message[];
+  agentState: AgentState;
+  files: FileType[];
+  sendMessage: (text: string, images?: ImageAttachment[]) => void;
+  connect: (agentId: string) => void;
+  disconnect: () => void;
 }
 ```
 
-**Dependencies:** None (standalone module)
+---
+
+#### src/routes/chat/utils/handle-websocket-message.ts
+**Purpose:** Parse and route WebSocket events from agent.
+
+**Location:** `src/routes/chat/utils/handle-websocket-message.ts`
+
+**Event Types:**
+| Event | Purpose |
+|-------|---------|
+| `message_chunk` | Streaming AI text |
+| `file_update` | Code file changes |
+| `phase_change` | Agent phase transition |
+| `deployment_status` | Deploy progress |
+| `error` | Agent error |
 
 ---
 
-## 14. deploy_vps.py (MAIN BOT only)
+### 1.5 Shared Components
 
-**Purpose:** SSH-based VPS deployment script using paramiko. Uploads bot + API to a remote server.
+#### src/components/agent-selector.tsx
+**Purpose:** Agent type selection (OXYGENT, Debugger, Architect, Designer).
 
-**Location:** `MAIN BOT/deploy_vps.py`
+**Location:** `src/components/agent-selector.tsx`
 
-**Key Functions:**
-| Function | Description |
-|----------|-------------|
-| `connect_vps()` | SSH connection to VPS |
-| `run_cmd(client, cmd)` | Execute remote command |
-| `upload_file(sftp, local, remote)` | Upload file via SFTP |
-| `deploy()` | Full deployment sequence |
+**Dependencies:** agent-types.ts
 
-**Dependencies:** `paramiko`
+---
+
+#### src/components/prompt-box.tsx
+**Purpose:** Message input with image upload and send button.
+
+**Location:** `src/components/prompt-box.tsx`
+
+---
+
+#### src/components/layout/
+**Purpose:** App layout components (sidebar, header, content area).
+
+**Location:** `src/components/layout/`
+
+**Key Components:**
+- `AppLayout` — Main layout wrapper
+- `Sidebar` — Navigation sidebar
+
+---
+
+### 1.6 Feature Modules
+
+#### src/features/
+**Purpose:** Feature-gated UI modules.
+
+**Location:** `src/features/`
+
+**Feature Groups:**
+| Feature | Purpose |
+|---------|---------|
+| `app/` | App management features |
+| `core/` | Core platform features |
+| `general/` | General UI features |
+| `presentation/` | App presentation/display |
+
+---
+
+## 2. Backend Modules (worker/)
+
+### 2.1 Core
+
+#### worker/index.ts
+**Purpose:** Worker entry point and request router.
+
+**Location:** `worker/index.ts`
+
+**Key Exports:**
+| Export | Type | Description |
+|--------|------|-------------|
+| `default` | ExportedHandler | Main fetch handler |
+| `CodeGeneratorAgent` | Durable Object | Code generation |
+| `ThinkAgent` | Durable Object | Agentic think loop |
+| `SpaceDO` | Durable Object | Git-backed file storage |
+| `DORateLimitStore` | Durable Object | Rate limit storage |
+| `UserSecretsStore` | Durable Object | User secrets |
+
+**Request Routing:**
+```
+Main domain (CUSTOM_DOMAIN)
+  → /api/* → Hono app (worker/app.ts)
+  → /oauth/* → OAuth handlers
+  → /apps/:id.git/* → Git protocol
+  → /* → Static assets (ASSETS binding)
+
+Subdomain ({app}.preview.domain)
+  → proxyToSandbox() → Live preview
+  → dispatchToWorker() → Permanent deployment
+```
+
+---
+
+#### worker/app.ts
+**Purpose:** Hono application with middleware and route setup.
+
+**Location:** `worker/app.ts`
+
+**Middleware Stack:**
+1. Secure headers (except WebSocket, OAuth)
+2. CORS (for /api/*)
+3. CSRF protection (double-submit pattern)
+4. Global rate limiting
+5. Auth (ownerOnly by default)
+
+**Dependencies:** Hono, cors, secure-headers, CsrfService, RateLimitService
+
+---
+
+### 2.2 API Routes
+
+#### worker/api/routes/index.ts
+**Purpose:** Route registration for all API endpoints.
+
+**Location:** `worker/api/routes/index.ts`
+
+**Route Groups:**
+| Route File | Prefix | Purpose |
+|------------|--------|---------|
+| `authRoutes.ts` | /api/auth/* | Login, register, OAuth, sessions |
+| `appRoutes.ts` | /api/apps/* | App CRUD, favorites, visibility |
+| `userRoutes.ts` | /api/user/* | Profile, settings, providers |
+| `codegenRoutes.ts` | /api/agent/* | Agent sessions, streaming |
+| `modelConfigRoutes.ts` | /api/model-configs/* | AI model configuration |
+| `modelProviderRoutes.ts` | /api/user/providers/* | BYOK provider management |
+| `githubExporterRoutes.ts` | /api/github-app/* | GitHub export |
+| `statsRoutes.ts` | /api/stats/* | User statistics |
+| `analyticsRoutes.ts` | /api/*/analytics/* | AI Gateway analytics |
+| `cloudflareConnectRoutes.ts` | /api/cloudflare/* | CF OAuth flow |
+| `cloudflareAccountRoutes.ts` | /api/cloudflare/* | CF account management |
+| `limitsRoutes.ts` | /api/limits | Usage limits |
+| `statusRoutes.ts` | /api/status | Platform status |
+| `capabilitiesRoutes.ts` | /api/capabilities | Feature capabilities |
+| `sentryRoutes.ts` | /api/sentry/* | Error reporting tunnel |
+| `ticketRoutes.ts` | /api/tickets/* | WebSocket tickets |
+| `imagesRoutes.ts` | /api/screenshots/* | Screenshot serving |
+
+---
+
+### 2.3 Database
+
+#### worker/database/schema.ts
+**Purpose:** D1 database schema definitions (Drizzle ORM).
+
+**Location:** `worker/database/schema.ts`
+
+**Tables:**
+| Table | Purpose |
+|-------|---------|
+| `users` | User accounts |
+| `apps` | Generated applications |
+| `app_files` | App source files |
+| `sessions` | User sessions |
+| `model_configs` | AI model configurations |
+| `model_providers` | BYOK provider keys |
+| `deployments` | Deployment records |
+| `analytics` | AI Gateway usage |
+| `rate_limits` | Rate limit tracking |
+
+---
+
+#### worker/database/services/
+**Purpose:** Database service layer for business logic.
+
+**Location:** `worker/database/services/`
+
+**Services:**
+| Service | Purpose |
+|---------|---------|
+| `AppService.ts` | App CRUD, visibility, ownership |
+| `UserService.ts` | User management |
+| `SessionService.ts` | Session tracking |
+| `ModelConfigService.ts` | Model configuration |
+| `ModelProvidersService.ts` | Provider key management |
+| `ApiKeyService.ts` | API key management |
+| `AnalyticsService.ts` | Usage analytics |
+| `AuthService.ts` | Authentication |
+
+---
+
+### 2.4 Durable Objects
+
+#### worker/agents/core/codingAgent.ts
+**Purpose:** Code generation agent with tool execution.
+
+**Location:** `worker/agents/core/codingAgent.ts`
+
+**Key Features:**
+- Model rotation (OpenCode Zen API)
+- File generation and updates
+- Tool calling (read, write, patch, terminal)
+- Streaming WebSocket progress
+
+---
+
+#### worker/agents/think/ThinkAgent.ts
+**Purpose:** Agentic think loop for complex tasks.
+
+**Location:** `worker/agents/think/ThinkAgent.ts`
+
+**Key Features:**
+- Multi-step planning
+- Iterative code generation
+- SpaceDO integration for file storage
+- Browser automation tools
+
+---
+
+#### @space-do/space (SpaceDO)
+**Purpose:** Git-backed file storage for generated apps.
+
+**Location:** `@space-do/space` (npm package)
+
+**Key Features:**
+- Git commit history for app files
+- Branch management
+- Preview URL generation
+- Deploy to permanent workers
+
+---
+
+### 2.5 Services
+
+#### worker/services/rate-limit/
+**Purpose:** Rate limiting via Durable Objects.
+
+**Location:** `worker/services/rate-limit/`
+
+**Key Exports:**
+- `RateLimitService` — Global and per-user rate limiting
+- `DORateLimitStore` — Durable Object storage
+
+---
+
+#### worker/services/csrf/
+**Purpose:** CSRF token generation and validation.
+
+**Location:** `worker/services/csrf/`
+
+**Key Exports:**
+- `CsrfService` — Double-submit cookie pattern
+
+---
+
+#### worker/services/aigateway-proxy/
+**Purpose:** Proxy requests to Cloudflare AI Gateway.
+
+**Location:** `worker/services/aigateway-proxy/`
+
+**Key Exports:**
+- `proxyToAiGateway` — Forward inference requests
+
+---
+
+#### worker/services/sandbox/
+**Purpose:** Sandboxed code execution for user apps.
+
+**Location:** `worker/services/sandbox/`
+
+**Key Exports:**
+- `proxyToSandbox` — Route to live sandbox
+- `UserAppSandboxService` — Sandbox management
+
+---
+
+### 2.6 Middleware
+
+#### worker/middleware/auth/
+**Purpose:** Authentication and authorization middleware.
+
+**Location:** `worker/middleware/auth/`
+
+**Key Exports:**
+- `auth` — JWT/cookie authentication
+- `routeAuth` — Route-level auth config
+- `ticketAuth` — WebSocket ticket auth
+
+---
+
+### 2.7 Utilities
+
+#### worker/utils/
+**Purpose:** Shared utility functions.
+
+**Location:** `worker/utils/`
+
+**Key Utilities:**
+| File | Purpose |
+|------|---------|
+| `authUtils.ts` | Authentication helpers |
+| `cryptoUtils.ts` | Encryption/decryption |
+| `jwtUtils.ts` | JWT token handling |
+| `urls.ts` | URL construction |
+| `envs.ts` | Environment detection |
+| `pathUtils.ts` | Path manipulation |
+| `idGenerator.ts` | Unique ID generation |
+| `githubUtils.ts` | GitHub API helpers |
+| `deployToCf.ts` | Cloudflare deployment |
+
+---
+
+## 3. Shared Modules (shared/)
+
+### shared/types/errors.ts
+**Purpose:** Error types shared between frontend and backend.
+
+**Location:** `shared/types/errors.ts`
+
+**Key Types:**
+| Type | Purpose |
+|------|---------|
+| `SecurityErrorType` | Error classification enum |
+| `SecurityError` | Base security error class |
+| `RateLimitExceededError` | Rate limit violation |
+| `UsageLimitExceededError` | Free tier limit exceeded |
+
+---
+
+### shared/constants/limits.ts
+**Purpose:** Limit constants shared between frontend and backend.
+
+**Location:** `shared/constants/limits.ts`
+
+**Constants:**
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `MINIMUM_CLOUDFLARE_BALANCE` | $2.00 | Minimum CF balance |
+| `CREDITS_BANNER_THRESHOLD` | $10 | Banner visibility threshold |
+
+**Functions:**
+- `hasMinimumBalance()` — Check CF balance
+- `canProceedWithRequest()` — Validate limits
+
+---
+
+## 4. Legacy Modules (MAIN BOT/)
+
+### Python Bot Modules
+**Purpose:** Original Telegram bot (legacy, maintained but not primary).
+
+**Location:** `MAIN BOT/`
+
+| Module | Purpose |
+|--------|---------|
+| `main.py` | Telegram bot entry, handlers |
+| `config.py` | Environment variables |
+| `database.py` | PostgreSQL operations |
+| `agent_engine.py` | Hermes-style agent loop |
+| `coding_tools.py` | 7-tool sandbox |
+| `payments.py` | Telegram Stars payments |
+| `memory_system.py` | Triple-layer memory |
+| `context_engine.py` | Token tracking |
+| `api_server.py` | FastAPI Mini App backend |
+| `cloudflare_deploy.py` | CF Pages/Workers deploy |
+| `cloudflare_oauth.py` | Per-user CF OAuth |
+| `error_fix.py` | AI error detection |
+| `project_analyzer.py` | Project type detection |
+| `deploy_vps.py` | SSH VPS deployment |
 
 ---
 
 ## Cross-Module Relationships
 
 ```
-MAIN BOT:
-  main.py
-    ├── config.py ─────────────────── (no deps)
-    ├── database.py ───────────────── depends on: config
-    ├── agent_engine.py ───────────── depends on: config, coding_tools
-    ├── coding_tools.py ───────────── (no deps)
-    ├── payments.py ───────────────── depends on: database
-    ├── memory_system.py ──────────── (no deps)
-    ├── context_engine.py ─────────── (no deps)
-    ├── api_server.py ─────────────── depends on: database, config, error_fix
-    ├── cloudflare_oauth.py ───────── depends on: database
-    ├── cloudflare_deploy.py ──────── depends on: cloudflare_oauth
-    ├── error_fix.py ──────────────── depends on: config
-    ├── project_analyzer.py ───────── (no deps)
-    └── deploy_vps.py ─────────────── (no deps)
+src/ (Frontend)
+  ├── api-client.ts ───────→ worker/api/* (HTTP)
+  ├── use-chat.ts ─────────→ worker WebSocket (WS)
+  ├── auth-context.tsx ────→ apiClient.getProfile()
+  └── query-keys.ts ───────→ TanStack Query cache
+
+worker/ (Backend)
+  ├── app.ts ──────────────→ routes/* → controllers/* → services/*
+  ├── index.ts ────────────→ app.ts, sandbox, dispatch
+  ├── agents/* ────────────→ SpaceDO, AI Gateway
+  └── database/* ──────────→ D1 (Drizzle ORM)
+
+shared/ (Shared)
+  ├── types/errors.ts ─────→ worker/services/*, src/api-client.ts
+  └── constants/limits.ts ─→ worker/limits/*, src/limits-context.tsx
 ```
 
 ## Related Codemaps

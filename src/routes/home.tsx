@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PaperPlaneTiltIcon, ChatsIcon, TrashIcon, PencilSimpleIcon, ClockIcon } from '@phosphor-icons/react';
 import { getChats, deleteChat, renameChat, type Chat } from '@/lib/chat-api';
+import { AgentSelector } from '@/components/agent-selector';
 
 const MAX_QUERY_LENGTH = 2000;
 
@@ -28,13 +29,41 @@ export default function Home() {
   const [chatsLoading, setChatsLoading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [selectedAgent, setSelectedAgent] = useState('oxygent');
+  
+  // Editable title state
+  const [customTitle, setCustomTitle] = useState(() => 
+    localStorage.getItem('oxycode_custom_title') || ''
+  );
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editTitleInput, setEditTitleInput] = useState('');
+
+  const handleSaveTitle = () => {
+    const newTitle = editTitleInput.trim();
+    setCustomTitle(newTitle);
+    if (newTitle) {
+      localStorage.setItem('oxycode_custom_title', newTitle);
+    } else {
+      localStorage.removeItem('oxycode_custom_title');
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleStartEditTitle = () => {
+    setEditTitleInput(customTitle);
+    setIsEditingTitle(true);
+  };
+
+  const handleCancelEditTitle = () => {
+    setIsEditingTitle(false);
+    setEditTitleInput('');
+  };
 
   const placeholderPhrases = useMemo(
     () => ['a modern portfolio website', 'a Telegram bot', 'a SaaS landing page'],
     [],
   );
 
-  // Load chats on mount
   useEffect(() => {
     if (isAuthenticated) {
       setChatsLoading(true);
@@ -48,7 +77,7 @@ export default function Home() {
   const handleCreateApp = () => {
     if (!query.trim() || query.length > MAX_QUERY_LENGTH) return;
     const encodedQuery = encodeURIComponent(query.trim());
-    navigate(`/chat/new?query=${encodedQuery}`);
+    navigate(`/chat/new?query=${encodedQuery}&agent=${selectedAgent}`);
     setQuery('');
   };
 
@@ -107,10 +136,58 @@ export default function Home() {
               ?
             </h1>
             {user && (
-              <p className="text-center text-sm text-kumo-subtle">
-                Hey, {user.first_name} 👋
-              </p>
+              <div className="flex items-center justify-center gap-2">
+                {isEditingTitle ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editTitleInput}
+                      onChange={(e) => setEditTitleInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveTitle();
+                        if (e.key === 'Escape') handleCancelEditTitle();
+                      }}
+                      placeholder="Enter custom title..."
+                      className="text-sm text-center bg-transparent border-b border-kumo-line focus:outline-none focus:border-brand-emphasis text-kumo-default px-2 py-1"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleSaveTitle}
+                      className="text-xs text-brand-emphasis hover:text-brand-emphasis/80"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={handleCancelEditTitle}
+                      className="text-xs text-kumo-subtle hover:text-kumo-default"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <p 
+                    className="text-center text-sm text-kumo-subtle cursor-pointer hover:text-kumo-default transition-colors group flex items-center gap-1"
+                    onClick={handleStartEditTitle}
+                  >
+                    {customTitle ? (
+                      <>
+                        {customTitle}
+                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </>
+                    ) : (
+                      <>
+                        Hey, {user.first_name} 👋
+                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
             )}
+          </div>
+
+          <div className="mb-3">
+            <AgentSelector selected={selectedAgent} onSelect={setSelectedAgent} />
           </div>
 
           <div className="relative">
@@ -138,7 +215,6 @@ export default function Home() {
           </div>
         </motion.div>
 
-        {/* Chat History */}
         {isAuthenticated && chats.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -199,7 +275,7 @@ export default function Home() {
                     </button>
                     <button
                       onClick={(e) => handleDeleteChat(e, chat.id)}
-                      className="size-7 rounded-lg flex items-center justify-center text-kumo-subtle hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      className="size-7 rounded-lg flex items-center justify-center text-kumo-subtle hover:text-red-400 hover:bg-red-500/10"
                     >
                       <TrashIcon className="size-3.5" />
                     </button>

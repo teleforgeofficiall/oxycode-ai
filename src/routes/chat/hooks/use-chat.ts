@@ -55,6 +55,7 @@ export function useChat({
 	projectType = 'app',
 	behaviorType: explicitBehaviorType,
 	autoStart = true,
+	agentType = 'oxygent',
 	onDebugMessage,
 	onTerminalMessage,
 	onCloudflareDeployGate,
@@ -72,6 +73,7 @@ export function useChat({
 	 * gesture before it runs, preventing zero-click prompt injection.
 	 */
 	autoStart?: boolean;
+	agentType?: string;
 	onDebugMessage?: (type: 'error' | 'warning' | 'info' | 'websocket', message: string, details?: string, source?: string, messageType?: string, rawMessage?: unknown) => void;
 	onTerminalMessage?: (log: { id: string; content: string; type: 'command' | 'stdout' | 'stderr' | 'info' | 'error' | 'warn' | 'debug'; timestamp: number; source?: string }) => void;
 	onCloudflareDeployGate?: (code: CloudflareDeploymentErrorCode) => void;
@@ -172,6 +174,40 @@ export function useChat({
 	const [isPhaseProgressActive, setIsPhaseProgressActive] = useState(false);
 
 	const [isThinking, setIsThinking] = useState(false);
+	
+	// Timeout for stuck thinking state - clear after 120 seconds
+	useEffect(() => {
+		if (!isThinking) return;
+		
+		const thinkingTimeout = setTimeout(() => {
+			logger.warn('Thinking state stuck for 120s, auto-clearing');
+			setIsThinking(false);
+			setMessages(prev => [
+				...prev,
+				createAIMessage(`thinking_timeout_${Date.now()}`, 
+					'⏱️ AI response is taking longer than expected. Please try sending your message again.')
+			]);
+		}, 120000);
+		
+		return () => clearTimeout(thinkingTimeout);
+	}, [isThinking, setMessages]);
+	
+	// Timeout for stuck blueprint generation - clear after 180 seconds
+	useEffect(() => {
+		if (!isGeneratingBlueprint) return;
+		
+		const blueprintTimeout = setTimeout(() => {
+			logger.warn('Blueprint generation stuck for 180s, auto-clearing');
+			setIsGeneratingBlueprint(false);
+			setMessages(prev => [
+				...prev,
+				createAIMessage(`blueprint_timeout_${Date.now()}`, 
+					'⏱️ Blueprint generation is taking longer than expected. Please try sending your message again.')
+			]);
+		}, 180000);
+		
+		return () => clearTimeout(blueprintTimeout);
+	}, [isGeneratingBlueprint, setMessages]);
 	
 	// Preview refresh state - triggers preview reload after deployment
 	const [shouldRefreshPreview, setShouldRefreshPreview] = useState(false);
@@ -563,6 +599,7 @@ export function useChat({
 						query: userQuery,
 						projectType,
 						behaviorType: explicitBehaviorType,
+						agentType,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
 

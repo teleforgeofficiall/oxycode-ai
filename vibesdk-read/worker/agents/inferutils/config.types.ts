@@ -337,7 +337,107 @@ const MODELS_MASTER = {
             creditCost: 8, // $0.22
             contextSize: 262144, // 256K Context
         },
-    }
+    },
+
+    // --- OpenCode Zen Free Models ---
+    OPENCODE_MIMO_FREE: {
+        id: 'opencode/mimo-v2.5-free',
+        config: {
+            name: 'MiMo V2.5 Free (OpenCode)',
+            size: ModelSize.REGULAR,
+            provider: 'opencode',
+            creditCost: 0, // FREE
+            contextSize: 128000, // 128K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+    OPENCODE_HY3_FREE: {
+        id: 'opencode/hy3-free',
+        config: {
+            name: 'Hy3 Free (OpenCode)',
+            size: ModelSize.REGULAR,
+            provider: 'opencode',
+            creditCost: 0, // FREE
+            contextSize: 128000, // 128K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+    OPENCODE_NEMOTRON_FREE: {
+        id: 'opencode/nemotron-3-ultra-free',
+        config: {
+            name: 'Nemotron 3 Ultra Free (OpenCode)',
+            size: ModelSize.LARGE,
+            provider: 'opencode',
+            creditCost: 0, // FREE
+            contextSize: 128000, // 128K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+    OPENCODE_NEMOTRON_LITE_FREE: {
+        id: 'opencode/nemotron-3.5-lightning-free',
+        config: {
+            name: 'Nemotron 3.5 Lightning Free (OpenCode)',
+            size: ModelSize.LITE,
+            provider: 'opencode',
+            creditCost: 0, // FREE
+            contextSize: 128000, // 128K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+    OPENCODE_BIG_PICKLE: {
+        id: 'opencode/big-pickle',
+        config: {
+            name: 'Big Pickle Free (OpenCode)',
+            size: ModelSize.LARGE,
+            provider: 'opencode',
+            creditCost: 0, // FREE
+            contextSize: 128000, // 128K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+
+    // --- OpenCode Zen Cheap Paid Models ---
+    OPENCODE_GPT_5_NANO: {
+        id: 'opencode/gpt-5-nano',
+        config: {
+            name: 'GPT-5 Nano (OpenCode)',
+            size: ModelSize.LITE,
+            provider: 'opencode',
+            creditCost: 0.2, // $0.05/1M input
+            contextSize: 400000, // 400K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+    OPENCODE_GPT_5_4_NANO: {
+        id: 'opencode/gpt-5.4-nano',
+        config: {
+            name: 'GPT-5.4 Nano (OpenCode)',
+            size: ModelSize.LITE,
+            provider: 'opencode',
+            creditCost: 0.8, // $0.20/1M input
+            contextSize: 400000, // 400K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
+    OPENCODE_DEEPSEEK_V4_FLASH: {
+        id: 'opencode/deepseek-v4-flash',
+        config: {
+            name: 'DeepSeek V4 Flash (OpenCode)',
+            size: ModelSize.REGULAR,
+            provider: 'opencode',
+            creditCost: 0.9, // $0.22/1M input
+            contextSize: 128000, // 128K Context
+            nonReasoning: true,
+            directOverride: true,
+        }
+    },
 } as const;
 
 /**

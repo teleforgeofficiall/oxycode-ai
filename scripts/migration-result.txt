@@ -1,0 +1,5 @@
+STDOUT:
+SUCCESS: agent_type column added/verified
+Verified: ('agent_type', 'text', "'oxygent'::text")
+
+STDERR:

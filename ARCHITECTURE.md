@@ -426,6 +426,72 @@ logger.warning(f"Rate limit on model: {model}")
 
 ---
 
+## Multi-Agent System
+
+### Agent Types
+
+The OXYCODE platform supports multiple specialized AI agents, each optimized for different tasks:
+
+| Agent | Icon | Description | Use Case |
+|-------|------|-------------|----------|
+| **OXYGENT** | 👾 | Full-stack coding agent | Build, deploy, and ship software |
+| **Debugger** | 🔧 | Expert bug finder | Analyze code and fix errors quickly |
+| **Architect** | 🏗️ | System design specialist | Plan scalable architectures |
+| **Designer** | 🎨 | UI/UX expert | Create beautiful, responsive interfaces |
+
+### Agent Selection
+
+Users can switch between agents using the `AgentSelector` component in the chat interface. Each agent has:
+
+- **Specialized System Prompt** — Optimized for its domain
+- **Unique Color Scheme** — Visual identification
+- **Tailored Responses** — Focused on specific expertise
+
+### Agent Type Definitions
+
+```typescript
+// src/lib/agent-types.ts
+
+interface AgentType {
+  id: string;           // Unique identifier
+  name: string;         // Display name
+  icon: string;         // Emoji icon
+  description: string;  // Short description
+  systemPrompt: string; // AI system prompt
+  color: string;        // Theme color (hex)
+}
+
+const AGENT_TYPES: AgentType[] = [
+  {
+    id: 'oxygent',
+    name: 'OXYGENT',
+    icon: '👾',
+    description: 'Full-stack coding agent. Builds, deploys, and ships software.',
+    systemPrompt: `You are OXYGENT — an autonomous AI agent...`,
+    color: '#f6821f',
+  },
+  // ... Debugger, Architect, Designer
+];
+```
+
+### CodeGen Args
+
+When creating an agent session, the `CodeGenArgs` interface supports agent selection:
+
+```typescript
+// src/api-types.ts
+
+interface CodeGenArgs {
+  query: string;           // User's request
+  projectType?: string;    // Project type
+  behaviorType?: string;   // Agent behavior mode
+  agentType?: string;      // Agent ID (oxygent, debugger, architect, designer)
+  images?: ImageAttachment[]; // Optional image attachments
+}
+```
+
+---
+
 ## Future Considerations
 
 ### Potential Enhancements

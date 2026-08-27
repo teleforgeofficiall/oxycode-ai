@@ -13,6 +13,13 @@ type ErrorMessage = {
     showAsPopup?: boolean; // Flag to show as popup/toast instead of chat message
 };
 
+type InferenceErrorMessage = {
+    type: 'inference_error';
+    error: string;
+    code: 'timeout' | 'rate_limit' | 'provider_error' | 'unknown';
+    retryable?: boolean;
+};
+
 type StateMessage = {
 	type: 'cf_agent_state';
 	state: AgentState;
@@ -635,6 +642,7 @@ export type WebSocketMessage =
 	| GitHubExportCompletedMessage
 	| GitHubExportErrorMessage
 	| ErrorMessage
+    | InferenceErrorMessage
     | RateLimitErrorMessage
 	| UserSuggestionsProcessingMessage
 	| ConversationResponseMessage

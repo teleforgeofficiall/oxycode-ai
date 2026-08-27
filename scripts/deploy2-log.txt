@@ -1,0 +1,12 @@
+npm warn Unknown global config "--init.module". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+ ⛅️ wrangler 4.121.0 (update available 4.125.0)
+───────────────────────────────────────────────
+✨ Compiled Worker successfully
+Uploading... (448/448)
+✨ Success! Uploaded 0 files (448 already uploaded) (0.38 sec)
+
+✨ Uploading Functions bundle
+🌎 Deploying...
+✨ Deployment complete! Take a peek over at https://b2f10ae0.oxycode-miniapp.pages.dev
+EXIT=0

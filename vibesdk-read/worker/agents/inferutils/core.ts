@@ -455,6 +455,11 @@ export async function getConfigurationForModel(
                     baseURL: 'https://api.anthropic.com/v1/',
                     apiKey: env.ANTHROPIC_API_KEY,
                 };
+            case 'opencode':
+                return {
+                    baseURL: 'https://opencode.ai/zen/v1',
+                    apiKey: env.OPENCODE_API_KEY,
+                };
             default:
                 providerForcedOverride = modelConfig.provider as AIGatewayProviders;
                 break;
@@ -872,6 +877,17 @@ export async function infer<OutputSchema extends z.ZodObject>({
             tool_choice: 'auto' as const
         } : {};
         let response: OpenAI.ChatCompletion | OpenAI.ChatCompletionChunk | Stream<OpenAI.ChatCompletionChunk>;
+        
+        // Create a timeout-aborted signal (90 seconds max for inference)
+        const INFERENCE_TIMEOUT_MS = 90000;
+        const timeoutController = new AbortController();
+        const timeoutId = setTimeout(() => timeoutController.abort(), INFERENCE_TIMEOUT_MS);
+        
+        // Combine user's abort signal with timeout signal
+        const combinedSignal = abortSignal 
+            ? AbortSignal.any([abortSignal, timeoutController.signal])
+            : timeoutController.signal;
+        
         try {
             // Call OpenAI API with proper structured output format
             response = await client.chat.completions.create({
@@ -886,7 +902,7 @@ export async function infer<OutputSchema extends z.ZodObject>({
                 temperature,
                 frequency_penalty,
             }, {
-                signal: abortSignal,
+                signal: combinedSignal,
                 headers: {
                     "cf-aig-metadata": JSON.stringify({
                         chatId: metadata.agentId,
@@ -896,19 +912,22 @@ export async function infer<OutputSchema extends z.ZodObject>({
                     })
                 }
             });
+            clearTimeout(timeoutId);
             console.log(`Inference response received`);
         } catch (error) {
+            clearTimeout(timeoutId);
             // Check if error is due to abort
             if (error instanceof Error && (error.name === 'AbortError' || error.message?.includes('aborted') || error.message?.includes('abort'))) {
+                // Check if it was our timeout that triggered
+                if (timeoutController.signal.aborted && !(abortSignal?.aborted)) {
+                    console.error(`Inference timed out after ${INFERENCE_TIMEOUT_MS}ms`);
+                    throw new Error(`AI response timed out after ${INFERENCE_TIMEOUT_MS / 1000} seconds. The model may be overloaded — please try again.`);
+                }
                 console.log('Inference cancelled by user');
                 throw new AbortError('**User cancelled inference**', toolCallContext);
             }
             
             console.error(`Failed to get inference response from OpenAI: ${error}`);
-            // if ((error instanceof Error && error.message.includes('429')) || (typeof error === 'string' && error.includes('429'))) {
-
-            //     throw new RateLimitExceededError('Rate limit exceeded in LLM calls, Please try again later', RateLimitType.LLM_CALLS);
-            // }
             throw error;
         }
         let toolCalls: ChatCompletionMessageFunctionToolCall[] = [];

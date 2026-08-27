@@ -79,3 +79,11 @@ verify_*.py
 e2e_*.py
 *.pyc
 __pycache__
+
+# Deployment packages
+*.zip
+*.tar.gz
+
+# Secrets
+*.pem
+*.key

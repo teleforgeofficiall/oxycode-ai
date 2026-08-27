@@ -1,0 +1,21 @@
+● oxycode-bot.service - OXYCODE Bot
+     Loaded: loaded (/etc/systemd/system/oxycode-bot.service; enabled; vendor preset: enabled)
+     Active: active (running) since Wed 2026-08-26 23:22:09 IST; 2s ago
+   Main PID: 317864 (python3)
+      Tasks: 1 (limit: 2216)
+     Memory: 36.4M
+        CPU: 688ms
+     CGroup: /system.slice/oxycode-bot.service
+             └─317864 /usr/bin/python3 main.py
+
+---
+● oxycode-api.service - OXYCODE API
+     Loaded: loaded (/etc/systemd/system/oxycode-api.service; enabled; vendor preset: enabled)
+     Active: active (running) since Wed 2026-08-26 23:22:09 IST; 2s ago
+   Main PID: 317865 (python3)
+      Tasks: 7 (limit: 2216)
+     Memory: 39.8M
+        CPU: 885ms
+     CGroup: /system.slice/oxycode-api.service
+             └─317865 /usr/bin/python3 api_server.py
+

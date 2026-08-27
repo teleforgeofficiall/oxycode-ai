@@ -1197,6 +1197,49 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 break;
             }
 
+            case 'inference_error': {
+                const { error: errorMsg, code, retryable } = message;
+                
+                logger.info('🤖 Inference error:', { code, errorMsg, retryable });
+                
+                // Clear thinking state
+                setIsThinking(false);
+                setIsGenerating(false);
+                
+                // Show appropriate message based on error code
+                let userMessage = '';
+                switch (code) {
+                    case 'timeout':
+                        userMessage = `⏱️ AI response timed out. The model may be overloaded.\n\nPlease try again or switch to a different model.`;
+                        break;
+                    case 'rate_limit':
+                        userMessage = `🚫 Rate limit exceeded. Please wait a moment and try again.`;
+                        break;
+                    case 'provider_error':
+                        userMessage = `⚠️ AI provider error: ${errorMsg}\n\nPlease try again.`;
+                        break;
+                    default:
+                        userMessage = `❌ AI error: ${errorMsg || 'Unknown error occurred'}`;
+                }
+                
+                setMessages(prev => [
+                    ...prev,
+                    createAIMessage(`inference_error_${Date.now()}`, userMessage)
+                ]);
+                
+                toast.error(userMessage, { duration: 8000 });
+                
+                onDebugMessage?.(
+                    'error',
+                    'Inference Error',
+                    `${code}: ${errorMsg}`,
+                    'WebSocket',
+                    'inference_error',
+                    message
+                );
+                break;
+            }
+
             default:
                 logger.warn('Unhandled message:', message);
         }

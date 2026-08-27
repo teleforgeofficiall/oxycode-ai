@@ -129,6 +129,7 @@ function ChatSession() {
 	const urlBehaviorType = searchParams.get(
 		'behaviorType',
 	) as BehaviorType | null;
+	const urlAgentType = searchParams.get('agent') || 'oxygent';
 
 	// Only auto-start a brand-new session when it originated from in-app
 	// navigation (e.g. the home prompt box sets `fromPrompt`). Sessions opened
@@ -267,6 +268,7 @@ function ChatSession() {
 		projectType: urlProjectType as ProjectType,
 		behaviorType: urlBehaviorType ?? undefined,
 		autoStart,
+		agentType: urlAgentType,
 		onDebugMessage: addDebugMessage,
 		onCloudflareDeployGate: handleCloudflareDeployGate,
 	});

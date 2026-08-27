@@ -494,7 +494,7 @@ git commit -m "chore: remove unused MaintenanceOverlay component"
 
 ## Testing Strategy
 
-- **Manual test — Admin + Maintenance ON:** Login as admin (ID 8972944701 or 7371674958), toggle maintenance ON via Telegram bot `/admin`. Open miniapp → should see normal home page, sidebar, profile page works.
+- **Manual test — Admin + Maintenance ON:** Login as admin (ID YOUR_ADMIN_ID or YOUR_ADMIN_ID), toggle maintenance ON via Telegram bot `/admin`. Open miniapp → should see normal home page, sidebar, profile page works.
 - **Manual test — Non-admin + Maintenance ON:** Login as non-admin user. Open miniapp → should see maintenance page. Navigating to `/profile` should redirect back to maintenance page (via ProtectedRoute).
 - **Manual test — Maintenance OFF:** Toggle maintenance OFF. Both admin and non-admin should see normal home page. Profile page works for both.
 - **Manual test — Auth flow:** Non-admin can now authenticate (no 403). Auth response includes `maintenance` and `isAdmin` fields.

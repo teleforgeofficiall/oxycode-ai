@@ -590,6 +590,78 @@ export type VaultWebSocketMessage =
 	| VaultUpdateSecretRequest
 	| VaultSecretUpdatedResponse;
 
+// Agent System Message Types
+type AgentProgressMessage = {
+	type: 'agent_progress';
+	agentId: string;
+	agentType: string;
+	progress: number;
+	message: string;
+};
+
+type PlanGeneratedMessage = {
+	type: 'plan_generated';
+	plan: {
+		overview: string;
+		files: Array<{
+			path: string;
+			purpose: string;
+			complexity: 'low' | 'medium' | 'high';
+		}>;
+		folderStructure: string;
+		estimatedTime: string;
+	};
+};
+
+type PlanApprovalRequiredMessage = {
+	type: 'plan_approval_required';
+	planId: string;
+	message: string;
+};
+
+type PlanApprovedMessage = {
+	type: 'plan_approved';
+	planId: string;
+	message: string;
+};
+
+type PlanRejectedMessage = {
+	type: 'plan_rejected';
+	planId: string;
+	message: string;
+};
+
+type PlanModifiedMessage = {
+	type: 'plan_modified';
+	planId: string;
+	modifications: string;
+	message: string;
+};
+
+type FileOperationConfirmMessage = {
+	type: 'file_operation_confirm';
+	operation: 'delete' | 'edit' | 'recreate';
+	filePath: string;
+	message: string;
+	requiresConfirmation: boolean;
+};
+
+type FileOperationCompleteMessage = {
+	type: 'file_operation_complete';
+	operation: 'delete' | 'edit' | 'recreate';
+	filePath: string;
+	success: boolean;
+	message: string;
+};
+
+type DeploymentStatusMessage = {
+	type: 'deployment_status';
+	status: 'connecting' | 'deploying' | 'deployed' | 'error';
+	message: string;
+	previewUrl?: string;
+	error?: string;
+};
+
 export type WebSocketMessage =
 	| StateMessage
 	| AgentConnectedMessage
@@ -651,7 +723,16 @@ export type WebSocketMessage =
 	| ServerLogMessage
 	| VaultUnlockedMessage
 	| VaultLockedMessage
-	| VaultRequiredMessage;
+	| VaultRequiredMessage
+	| AgentProgressMessage
+	| PlanGeneratedMessage
+	| PlanApprovalRequiredMessage
+	| PlanApprovedMessage
+	| PlanRejectedMessage
+	| PlanModifiedMessage
+	| FileOperationConfirmMessage
+	| FileOperationCompleteMessage
+	| DeploymentStatusMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

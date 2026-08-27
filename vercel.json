@@ -1,10 +1,37 @@
 {
-  "installCommand": "npm install --legacy-peer-deps",
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "http://153.75.247.105:8000/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "worker/**",
+          "shared/**",
+          "space/**"
+        ]
+      }
+    },
+    {
+      "src": "worker/index.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/worker/index.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/"
+    }
+  ],
+  "env": {
+    "OPENAI_API_KEY": "@openai-api-key",
+    "CLOUDFLARE_API_TOKEN": "@cloudflare-api-token",
+    "CLOUDFLARE_ACCOUNT_ID": "@cloudflare-account-id",
+    "DATABASE_URL": "@database-url",
+    "JWT_SECRET": "@jwt-secret"
+  }
 }
