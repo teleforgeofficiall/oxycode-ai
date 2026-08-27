@@ -172,12 +172,12 @@ export default function Home() {
                     {customTitle ? (
                       <>
                         {customTitle}
-                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                       </>
                     ) : (
                       <>
                         Hey, {user.first_name} 👋
-                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <PencilSimpleIcon weight="duotone" className="size-3 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
                       </>
                     )}
                   </p>
