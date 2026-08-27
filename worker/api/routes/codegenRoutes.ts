@@ -1,4 +1,5 @@
 import { CodingAgentController } from '../controllers/agent/controller';
+import { AgentSystemController } from '../controllers/agent/agentSystemController';
 import { AppDatabaseController } from '../controllers/appDatabase/controller';
 import { ArtifactsController } from '../controllers/artifacts/controller';
 import { AppEnv } from '../../types/appenv';
@@ -81,4 +82,17 @@ export function setupCodegenRoutes(app: Hono<AppEnv>): void {
         setAuthLevel(AuthConfig.ownerOnly),
         adaptController(ArtifactsController, ArtifactsController.listBranches),
     );
+
+    // ========================================
+    // MULTI-AGENT SYSTEM ROUTES
+    // ========================================
+
+    // Create new agent session with planner/build/explore/debug agents
+    app.post('/api/agent-system/session', setAuthLevel(AuthConfig.authenticated), adaptController(AgentSystemController, AgentSystemController.createSession));
+
+    // WebSocket for agent system
+    app.get('/api/agent-system/:sessionId/ws', setAuthLevel(AuthConfig.ownerOnly), adaptController(AgentSystemController, AgentSystemController.handleWebSocketConnection));
+
+    // Get session status
+    app.get('/api/agent-system/:sessionId/status', setAuthLevel(AuthConfig.authenticated), adaptController(AgentSystemController, AgentSystemController.getSessionStatus));
 }
